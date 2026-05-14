@@ -285,6 +285,19 @@ class MusicCog(commands.Cog):
             else:
                 await interaction.followup.send(f"**{len(songs_added)}** Songs zur Queue hinzugefügt.")
 
+    @app_commands.command(name="join", description="Bot joint dem Voice-Channel ohne Musik")
+    async def join(self, interaction: discord.Interaction):
+        if not interaction.user.voice:
+            return await interaction.response.send_message("Du musst in einem Voice-Channel sein!")
+        await interaction.response.defer()
+        try:
+            vc = await interaction.user.voice.channel.connect()
+            await asyncio.sleep(3)
+            still_connected = interaction.guild.voice_client is not None and interaction.guild.voice_client.is_connected()
+            await interaction.followup.send(f"Verbunden! Noch verbunden nach 3s: {still_connected}")
+        except Exception as e:
+            await interaction.followup.send(f"Fehler: {e}")
+
     @app_commands.command(name="radio", description="Spielt einen Radiosender ab")
     @app_commands.describe(sender="Sendername oder eigene Stream-URL (z.B. ballermann, 1live, ...)")
     async def radio(self, interaction: discord.Interaction, sender: str):
