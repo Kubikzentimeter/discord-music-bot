@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+import asyncio
 import os
 from dotenv import load_dotenv
 
@@ -14,21 +15,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 
-
-class MusicBot(commands.Bot):
-    async def setup_hook(self):
-        conn = self._connection
-        # discord.py stores event parsers in conn.parsers (dict built in ConnectionState.__init__)
-        p = getattr(conn, 'parsers', None) or getattr(conn, '_parsers', {})
-        self._parsers_dict = p
-        self._orig_voice_server_update = p.get('VOICE_SERVER_UPDATE')
-        p['VOICE_SERVER_UPDATE'] = lambda data: print(
-            f"[Startup] Blockiere VOICE_SERVER_UPDATE Guild {data.get('guild_id')}"
-        )
-        print("[Startup] VOICE_SERVER_UPDATE blockiert.")
-
-
-bot = MusicBot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 @bot.event
@@ -47,12 +34,6 @@ async def on_ready():
 
     print(f"Bot online als {bot.user} (ID: {bot.user.id})")
 
-    # Restore original VOICE_SERVER_UPDATE handler
-    if hasattr(bot, '_parsers_dict') and hasattr(bot, '_orig_voice_server_update'):
-        if bot._orig_voice_server_update:
-            bot._parsers_dict['VOICE_SERVER_UPDATE'] = bot._orig_voice_server_update
-        print("[Startup] Voice-Sperre aufgehoben.")
-
     if AUTO_GUILD_ID and AUTO_VOICE_CHANNEL_ID:
         await _auto_start_radio()
 
@@ -68,15 +49,23 @@ async def _auto_start_radio():
         print(f"[Auto-Radio] Voice-Channel {AUTO_VOICE_CHANNEL_ID} nicht gefunden.")
         return
 
-    if guild.voice_client:
-        await guild.voice_client.disconnect()
+    # Tell Discord we are leaving any voice channel first to clear stale session
+    print("[Auto-Radio] Lösche alte Voice-Session bei Discord...")
+    await guild.change_voice_state(channel=None)
+    await asyncio.sleep(2)
 
+    if guild.voice_client:
+        await guild.voice_client.disconnect(force=True)
+
+    print(f"[Auto-Radio] Verbinde mit #{channel.name}...")
     voice_client = await channel.connect()
 
     music_cog = bot.cogs.get("MusicCog")
     if music_cog:
         await music_cog.start_radio(guild, voice_client, AUTO_RADIO)
         print(f"[Auto-Radio] Starte '{AUTO_RADIO}' in #{channel.name}")
+    else:
+        print("[Auto-Radio] MusicCog nicht gefunden!")
 
 
 bot.run(TOKEN)
