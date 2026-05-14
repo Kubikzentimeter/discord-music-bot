@@ -23,7 +23,9 @@ async def on_ready():
         await bot.load_extension("cogs.music")
         bot._extensions_loaded = True
     try:
-        synced = await bot.tree.sync()
+        guild = discord.Object(id=1122303908149219380)
+        bot.tree.copy_global_to(guild=guild)
+        synced = await bot.tree.sync(guild=guild)
         print(f"Slash Commands synchronisiert: {len(synced)}")
     except Exception as e:
         print(f"Fehler beim Synchronisieren: {e}")
