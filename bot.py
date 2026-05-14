@@ -19,6 +19,16 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 @bot.event
+async def on_disconnect():
+    print("[Gateway] Disconnect — räume Voice-Clients auf...")
+    for vc in list(bot.voice_clients):
+        try:
+            await vc.disconnect(force=True)
+        except Exception:
+            pass
+
+
+@bot.event
 async def on_ready():
     if not hasattr(bot, "_extensions_loaded"):
         await bot.load_extension("cogs.music")
