@@ -85,42 +85,32 @@ def has_permission(interaction: discord.Interaction) -> bool:
 
 
 async def get_voice_client(interaction: discord.Interaction) -> discord.VoiceClient | None:
-    """Connect to the user's voice channel with stale-session cleanup."""
     if not interaction.user.voice:
         await interaction.followup.send("Du musst in einem Voice-Channel sein!")
         return None
 
     target = interaction.user.voice.channel
-
-    # Always disconnect first so Discord clears any stale voice session
     existing = interaction.guild.voice_client
     if existing:
         try:
             await existing.disconnect(force=True)
         except Exception:
             pass
+        await asyncio.sleep(2)
 
-    await interaction.guild.change_voice_state(channel=None)
-    await asyncio.sleep(5)
-
-    for attempt in range(3):
-        try:
-            vc = await target.connect()
-            await asyncio.sleep(1)
-            if vc.is_connected():
-                print(f"[Voice] Verbunden mit #{target.name} (Versuch {attempt + 1})")
-                return vc
-            print(f"[Voice] Verbindung sofort getrennt (Versuch {attempt + 1}), wiederhole...")
-            try:
-                await vc.disconnect(force=True)
-            except Exception:
-                pass
-        except Exception as e:
-            print(f"[Voice] Fehler (Versuch {attempt + 1}): {e}")
-        await asyncio.sleep(3)
-
-    await interaction.followup.send("Konnte nicht verbinden — bitte nochmal versuchen.")
-    return None
+    try:
+        vc = await target.connect(timeout=30)
+        await asyncio.sleep(2)
+        if vc.is_connected():
+            print(f"[Voice] Verbunden mit #{target.name}")
+            return vc
+        print("[Voice] Verbindung sofort getrennt")
+        await interaction.followup.send("Verbindung instabil — bitte nochmal versuchen.")
+        return None
+    except Exception as e:
+        print(f"[Voice] Fehler: {e}")
+        await interaction.followup.send(f"Konnte nicht verbinden: {e}")
+        return None
 
 
 class MusicCog(commands.Cog):

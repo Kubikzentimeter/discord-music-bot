@@ -25,22 +25,35 @@ async def graceful_shutdown():
             await guild.change_voice_state(channel=None)
         except Exception:
             pass
+    await asyncio.sleep(1)
     await bot.close()
 
 
 @bot.event
 async def on_ready():
-    # Fallback: stale state leeren falls letzter Shutdown nicht sauber war
-    for guild in bot.guilds:
-        try:
-            if guild.voice_client:
-                await guild.voice_client.disconnect(force=True)
-            await guild.change_voice_state(channel=None)
-        except Exception:
-            pass
-
     if not hasattr(bot, "_extensions_loaded"):
-        await asyncio.sleep(5)
+        # Block VOICE_SERVER_UPDATE so the 4006 reconnect loop can never complete
+        conn = bot._connection
+        original_handler = conn.parsers.get("VOICE_SERVER_UPDATE")
+        conn.parsers["VOICE_SERVER_UPDATE"] = lambda data: print("[Voice] VOICE_SERVER_UPDATE blockiert (Startup)")
+
+        # Clear any stale voice sessions
+        for guild in bot.guilds:
+            try:
+                if guild.voice_client:
+                    await guild.voice_client.disconnect(force=True)
+                await guild.change_voice_state(channel=None)
+            except Exception:
+                pass
+
+        print("[Startup] Warte 35s bis 4006-Storm abklingt...")
+        await asyncio.sleep(35)
+
+        # Restore handler and load cog
+        if original_handler:
+            conn.parsers["VOICE_SERVER_UPDATE"] = original_handler
+        print("[Startup] VOICE_SERVER_UPDATE wiederhergestellt")
+
         await bot.load_extension("cogs.music")
         bot._extensions_loaded = True
 
@@ -52,7 +65,7 @@ async def on_ready():
     except Exception as e:
         print(f"Fehler beim Synchronisieren: {e}")
 
-    print(f"Bot online als {bot.user} (ID: {bot.user.id})")
+    print(f"Bot bereit: {bot.user}")
 
 
 async def main():
