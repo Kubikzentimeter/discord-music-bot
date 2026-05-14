@@ -16,12 +16,35 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Startup phase: block automatic voice reconnects until bot is fully ready
+_startup_complete = False
+
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    """Block discord.py from auto-reconnecting to voice during startup."""
+    if _startup_complete:
+        return
+    if member.id != bot.user.id:
+        return
+    if after.channel is not None:
+        print(f"[Startup] Blockiere Auto-Reconnect in {after.channel.name}")
+        await member.guild.change_voice_state(channel=None)
+        if member.guild.voice_client:
+            try:
+                await member.guild.voice_client.disconnect(force=True)
+            except Exception:
+                pass
+
 
 @bot.event
 async def on_ready():
+    global _startup_complete
+
     if not hasattr(bot, "_extensions_loaded"):
         await bot.load_extension("cogs.music")
         bot._extensions_loaded = True
+
     try:
         guild = discord.Object(id=1122303908149219380)
         bot.tree.copy_global_to(guild=guild)
@@ -29,12 +52,19 @@ async def on_ready():
         print(f"Slash Commands synchronisiert: {len(synced)}")
     except Exception as e:
         print(f"Fehler beim Synchronisieren: {e}")
+
     print(f"Bot online als {bot.user} (ID: {bot.user.id})")
 
-    for g in bot.guilds:
-        if g.voice_client:
-            print(f"[Startup] Trenne alte Voice-Verbindung in {g.name}")
-            await g.voice_client.disconnect(force=True)
+    # Final cleanup of any stray voice clients
+    for vc in list(bot.voice_clients):
+        try:
+            await vc.disconnect(force=True)
+        except Exception:
+            pass
+    bot._connection._voice_clients.clear()
+
+    _startup_complete = True
+    print("[Startup] Startup abgeschlossen, Voice-Sperre aufgehoben.")
 
     if AUTO_GUILD_ID and AUTO_VOICE_CHANNEL_ID:
         await _auto_start_radio()
