@@ -85,36 +85,32 @@ def has_permission(interaction: discord.Interaction) -> bool:
 
 
 async def get_voice_client(interaction: discord.Interaction) -> discord.VoiceClient | None:
-    """Connect to the user's voice channel, handling stale sessions."""
+    """Connect to the user's voice channel with stale-session cleanup."""
     if not interaction.user.voice:
         await interaction.followup.send("Du musst in einem Voice-Channel sein!")
         return None
 
     target = interaction.user.voice.channel
-    vc = interaction.guild.voice_client
+
+    # Always disconnect first so Discord clears any stale voice session
+    existing = interaction.guild.voice_client
+    if existing:
+        try:
+            await existing.disconnect(force=True)
+        except Exception:
+            pass
+
+    await interaction.guild.change_voice_state(channel=None)
+    await asyncio.sleep(3)
 
     try:
-        if vc is None:
-            vc = await target.connect()
-        elif vc.channel != target:
-            await vc.move_to(target)
-    except discord.ClientException:
-        # Already connected — fetch current client
-        vc = interaction.guild.voice_client
+        vc = await target.connect()
+        print(f"[Voice] Verbunden mit #{target.name}")
+        return vc
     except Exception as e:
-        print(f"[Voice] Verbindungsfehler: {e}")
-        # Clear stale state and retry once
-        try:
-            await interaction.guild.change_voice_state(channel=None)
-            await asyncio.sleep(2)
-            if interaction.guild.voice_client:
-                await interaction.guild.voice_client.disconnect(force=True)
-            vc = await target.connect()
-        except Exception as e2:
-            await interaction.followup.send(f"Konnte nicht verbinden: {e2}")
-            return None
-
-    return interaction.guild.voice_client
+        print(f"[Voice] Fehler: {e}")
+        await interaction.followup.send(f"Konnte nicht verbinden: {e}")
+        return None
 
 
 class MusicCog(commands.Cog):
