@@ -17,12 +17,15 @@ intents.voice_states = True
 
 class MusicBot(commands.Bot):
     async def setup_hook(self):
-        # Block VOICE_SERVER_UPDATE processing before on_ready completes.
-        # This prevents discord.py from auto-reconnecting to stale voice sessions.
-        # on_ready deletes this instance override to restore normal behaviour.
-        self._connection.parse_voice_server_update = lambda data: (
-            print(f"[Startup] Blockiere VOICE_SERVER_UPDATE Guild {data.get('guild_id')}")
+        conn = self._connection
+        # discord.py stores event parsers in conn.parsers (dict built in ConnectionState.__init__)
+        p = getattr(conn, 'parsers', None) or getattr(conn, '_parsers', {})
+        self._parsers_dict = p
+        self._orig_voice_server_update = p.get('VOICE_SERVER_UPDATE')
+        p['VOICE_SERVER_UPDATE'] = lambda data: print(
+            f"[Startup] Blockiere VOICE_SERVER_UPDATE Guild {data.get('guild_id')}"
         )
+        print("[Startup] VOICE_SERVER_UPDATE blockiert.")
 
 
 bot = MusicBot(command_prefix="!", intents=intents)
@@ -44,12 +47,11 @@ async def on_ready():
 
     print(f"Bot online als {bot.user} (ID: {bot.user.id})")
 
-    # Restore original voice server update handler
-    try:
-        del bot._connection.parse_voice_server_update
-    except AttributeError:
-        pass
-    print("[Startup] Voice-Sperre aufgehoben.")
+    # Restore original VOICE_SERVER_UPDATE handler
+    if hasattr(bot, '_parsers_dict') and hasattr(bot, '_orig_voice_server_update'):
+        if bot._orig_voice_server_update:
+            bot._parsers_dict['VOICE_SERVER_UPDATE'] = bot._orig_voice_server_update
+        print("[Startup] Voice-Sperre aufgehoben.")
 
     if AUTO_GUILD_ID and AUTO_VOICE_CHANNEL_ID:
         await _auto_start_radio()
