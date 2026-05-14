@@ -14,33 +14,22 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Startup phase: block automatic voice reconnects until bot is fully ready
-_startup_complete = False
+class MusicBot(commands.Bot):
+    async def setup_hook(self):
+        # Block VOICE_SERVER_UPDATE processing before on_ready completes.
+        # This prevents discord.py from auto-reconnecting to stale voice sessions.
+        # on_ready deletes this instance override to restore normal behaviour.
+        self._connection.parse_voice_server_update = lambda data: (
+            print(f"[Startup] Blockiere VOICE_SERVER_UPDATE Guild {data.get('guild_id')}")
+        )
 
 
-@bot.event
-async def on_voice_state_update(member, before, after):
-    """Block discord.py from auto-reconnecting to voice during startup."""
-    if _startup_complete:
-        return
-    if member.id != bot.user.id:
-        return
-    if after.channel is not None:
-        print(f"[Startup] Blockiere Auto-Reconnect in {after.channel.name}")
-        await member.guild.change_voice_state(channel=None)
-        if member.guild.voice_client:
-            try:
-                await member.guild.voice_client.disconnect(force=True)
-            except Exception:
-                pass
+bot = MusicBot(command_prefix="!", intents=intents)
 
 
 @bot.event
 async def on_ready():
-    global _startup_complete
-
     if not hasattr(bot, "_extensions_loaded"):
         await bot.load_extension("cogs.music")
         bot._extensions_loaded = True
@@ -55,16 +44,12 @@ async def on_ready():
 
     print(f"Bot online als {bot.user} (ID: {bot.user.id})")
 
-    # Final cleanup of any stray voice clients
-    for vc in list(bot.voice_clients):
-        try:
-            await vc.disconnect(force=True)
-        except Exception:
-            pass
-    bot._connection._voice_clients.clear()
-
-    _startup_complete = True
-    print("[Startup] Startup abgeschlossen, Voice-Sperre aufgehoben.")
+    # Restore original voice server update handler
+    try:
+        del bot._connection.parse_voice_server_update
+    except AttributeError:
+        pass
+    print("[Startup] Voice-Sperre aufgehoben.")
 
     if AUTO_GUILD_ID and AUTO_VOICE_CHANNEL_ID:
         await _auto_start_radio()
