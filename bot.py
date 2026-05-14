@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import asyncio
+import signal
 import os
 from dotenv import load_dotenv
 
@@ -15,30 +16,31 @@ intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
-@bot.event
-async def on_disconnect():
-    print("[Gateway] Disconnect — räume Voice-Clients auf...")
-    for vc in list(bot.voice_clients):
+async def graceful_shutdown():
+    print("[Shutdown] Verlasse alle Voice-Channels...")
+    for guild in bot.guilds:
         try:
-            await vc.disconnect(force=True)
+            if guild.voice_client:
+                await guild.voice_client.disconnect()
+            await guild.change_voice_state(channel=None)
         except Exception:
             pass
+    await bot.close()
 
 
 @bot.event
 async def on_ready():
-    # Stale Voice-Sessions sofort leeren damit der 4006-Loop sich legt
+    # Fallback: stale state leeren falls letzter Shutdown nicht sauber war
     for guild in bot.guilds:
         try:
             if guild.voice_client:
                 await guild.voice_client.disconnect(force=True)
             await guild.change_voice_state(channel=None)
-            print(f"[Voice] Stale state für '{guild.name}' geleert")
         except Exception:
             pass
 
     if not hasattr(bot, "_extensions_loaded"):
-        await asyncio.sleep(8)  # Warten bis 4006-Storm sich legt
+        await asyncio.sleep(5)
         await bot.load_extension("cogs.music")
         bot._extensions_loaded = True
 
@@ -53,4 +55,12 @@ async def on_ready():
     print(f"Bot online als {bot.user} (ID: {bot.user.id})")
 
 
-bot.run(TOKEN)
+async def main():
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.ensure_future(graceful_shutdown()))
+    loop.add_signal_handler(signal.SIGINT, lambda: asyncio.ensure_future(graceful_shutdown()))
+    async with bot:
+        await bot.start(TOKEN)
+
+
+asyncio.run(main())
