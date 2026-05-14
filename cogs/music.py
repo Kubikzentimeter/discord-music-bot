@@ -9,17 +9,11 @@ import os
 import re
 from collections import deque
 
-# Vordefinierte Radiosender — Stream-URLs können bei Bedarf angepasst werden
 RADIO_STATIONS: dict[str, dict] = {
     "ballermann": {
         "name": "Ballermann Radio",
-        "url": "https://stream.ballermann.radio/ballermann",
+        "url": "https://www.ballermann-radio.de/stream/ballermannradio/",
         "emoji": "🍺",
-    },
-    "ballermann hits": {
-        "name": "Ballermann Hits Radio",
-        "url": "https://stream.ballermann.radio/ballermannhits",
-        "emoji": "🎉",
     },
     "1live": {
         "name": "WDR 1LIVE",
@@ -51,15 +45,53 @@ RADIO_STATIONS: dict[str, dict] = {
         "url": "https://streams.bigfm.de/bigfm-deutschland-128-mp3",
         "emoji": "🔊",
     },
+    "bayern3": {
+        "name": "Bayern 3",
+        "url": "https://dispatcher.rndfnk.com/br/br3/live/mp3/low",
+        "emoji": "📻",
+    },
 }
 
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
+sp = None
+if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
+    sp = spotipy.Spotify(
+        auth_manager=SpotifyClientCredentials(
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET,
+        )
+    )
+
 _raw_roles = os.getenv("ALLOWED_ROLE_IDS", "")
 _raw_users = os.getenv("ALLOWED_USER_IDS", "")
 ALLOWED_ROLE_IDS: set[int] = {int(x) for x in _raw_roles.split(",") if x.strip()}
 ALLOWED_USER_IDS: set[int] = {int(x) for x in _raw_users.split(",") if x.strip()}
+
+YTDL_OPTIONS = {
+    "format": "bestaudio/best",
+    "noplaylist": True,
+    "quiet": True,
+    "no_warnings": True,
+    "default_search": "ytsearch",
+    "source_address": "0.0.0.0",
+}
+
+FFMPEG_OPTIONS = {
+    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+    "options": "-vn",
+}
+
+FFMPEG_RADIO_OPTIONS = {
+    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -reconnect_on_network_error 1",
+    "options": "-vn",
+}
+
+ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
+
+SPOTIFY_TRACK_RE = re.compile(r"spotify\.com/track/([A-Za-z0-9]+)")
+SPOTIFY_PLAYLIST_RE = re.compile(r"spotify\.com/playlist/([A-Za-z0-9]+)")
 
 
 def has_permission(interaction: discord.Interaction) -> bool:
@@ -78,34 +110,6 @@ async def check_permission(interaction: discord.Interaction) -> bool:
         )
         return False
     return True
-
-sp = None
-if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
-    sp = spotipy.Spotify(
-        auth_manager=SpotifyClientCredentials(
-            client_id=SPOTIFY_CLIENT_ID,
-            client_secret=SPOTIFY_CLIENT_SECRET,
-        )
-    )
-
-YTDL_OPTIONS = {
-    "format": "bestaudio/best",
-    "noplaylist": True,
-    "quiet": True,
-    "no_warnings": True,
-    "default_search": "ytsearch",
-    "source_address": "0.0.0.0",
-}
-
-FFMPEG_OPTIONS = {
-    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn",
-}
-
-ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
-
-SPOTIFY_TRACK_RE = re.compile(r"spotify\.com/track/([A-Za-z0-9]+)")
-SPOTIFY_PLAYLIST_RE = re.compile(r"spotify\.com/playlist/([A-Za-z0-9]+)")
 
 
 class Song:
@@ -176,11 +180,7 @@ class MusicCog(commands.Cog):
             voice_client.stop()
         player = self.get_player(guild.id)
         source = discord.PCMVolumeTransformer(
-            discord.FFmpegPCMAudio(
-                station["url"],
-                before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                options="-vn",
-            ),
+            discord.FFmpegPCMAudio(station["url"], **FFMPEG_RADIO_OPTIONS),
             volume=player.volume,
         )
         voice_client.play(source)
@@ -255,7 +255,6 @@ class MusicCog(commands.Cog):
 
         player = self.get_player(interaction.guild.id)
 
-        # Spotify-Links auflösen
         queries = [suche]
         if "spotify.com" in suche:
             queries = await self._resolve_spotify(suche)
@@ -286,6 +285,74 @@ class MusicCog(commands.Cog):
             else:
                 await interaction.followup.send(f"**{len(songs_added)}** Songs zur Queue hinzugefügt.")
 
+    @app_commands.command(name="radio", description="Spielt einen Radiosender ab")
+    @app_commands.describe(sender="Sendername oder eigene Stream-URL (z.B. ballermann, 1live, ...)")
+    async def radio(self, interaction: discord.Interaction, sender: str):
+        if not await check_permission(interaction):
+            return
+
+        if not interaction.user.voice:
+            return await interaction.response.send_message("Du musst in einem Voice-Channel sein!", ephemeral=True)
+
+        key = sender.lower().strip()
+        station = RADIO_STATIONS.get(key)
+
+        if station:
+            stream_url = station["url"]
+            display_name = f"{station['emoji']} {station['name']}"
+        elif sender.startswith("http://") or sender.startswith("https://"):
+            stream_url = sender
+            display_name = f"📻 {sender}"
+        else:
+            names = "\n".join(f"• `{k}` — {v['emoji']} {v['name']}" for k, v in RADIO_STATIONS.items())
+            return await interaction.response.send_message(
+                f"Sender `{sender}` nicht gefunden. Verfügbare Sender:\n{names}",
+                ephemeral=True,
+            )
+
+        await interaction.response.defer()
+
+        voice_channel = interaction.user.voice.channel
+        voice_client = interaction.guild.voice_client
+
+        try:
+            if voice_client is None:
+                voice_client = await voice_channel.connect()
+            elif voice_client.channel != voice_channel:
+                await voice_client.move_to(voice_channel)
+        except Exception as e:
+            return await interaction.followup.send(f"Konnte nicht verbinden: {e}")
+
+        if voice_client.is_playing():
+            voice_client.stop()
+            await asyncio.sleep(0.5)
+
+        self.get_player(interaction.guild.id).current = None
+
+        source = discord.PCMVolumeTransformer(
+            discord.FFmpegPCMAudio(stream_url, **FFMPEG_RADIO_OPTIONS),
+            volume=self.get_player(interaction.guild.id).volume,
+        )
+        voice_client.play(source)
+
+        embed = discord.Embed(
+            title="📻 Radio",
+            description=f"**{display_name}** läuft jetzt!",
+            color=discord.Color.orange(),
+        )
+        embed.set_footer(text="Mit /stop kannst du das Radio beenden.")
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="radiolist", description="Zeigt alle verfügbaren Radiosender")
+    async def radiolist(self, interaction: discord.Interaction):
+        if not await check_permission(interaction):
+            return
+        embed = discord.Embed(title="📻 Verfügbare Radiosender", color=discord.Color.orange())
+        lines = [f"{v['emoji']} **{v['name']}** — `/radio {k}`" for k, v in RADIO_STATIONS.items()]
+        embed.description = "\n".join(lines)
+        embed.set_footer(text="Du kannst auch direkt eine Stream-URL angeben: /radio https://...")
+        await interaction.response.send_message(embed=embed)
+
     @app_commands.command(name="skip", description="Überspringt den aktuellen Song")
     async def skip(self, interaction: discord.Interaction):
         if not await check_permission(interaction):
@@ -311,6 +378,8 @@ class MusicCog(commands.Cog):
 
     @app_commands.command(name="queue", description="Zeigt die aktuelle Queue")
     async def queue(self, interaction: discord.Interaction):
+        if not await check_permission(interaction):
+            return
         player = self.get_player(interaction.guild.id)
         if not player.queue and not player.current:
             return await interaction.response.send_message("Die Queue ist leer.")
@@ -435,71 +504,6 @@ class MusicCog(commands.Cog):
             await interaction.response.send_message("Disconnected 👋")
         else:
             await interaction.response.send_message("Ich bin in keinem Voice-Channel.")
-
-    @app_commands.command(name="radio", description="Spielt einen Radiosender ab")
-    @app_commands.describe(sender="Sendername oder eigene Stream-URL (z.B. ballermann, 1live, ...)")
-    async def radio(self, interaction: discord.Interaction, sender: str):
-        if not await check_permission(interaction):
-            return
-        if not interaction.user.voice:
-            return await interaction.response.send_message("Du musst in einem Voice-Channel sein!")
-
-        voice_channel = interaction.user.voice.channel
-        voice_client = interaction.guild.voice_client
-
-        if voice_client is None:
-            voice_client = await voice_channel.connect()
-        elif voice_client.channel != voice_channel:
-            await voice_client.move_to(voice_channel)
-
-        # Gespeicherten Sender suchen oder direkte URL akzeptieren
-        key = sender.lower().strip()
-        station = RADIO_STATIONS.get(key)
-
-        if station:
-            stream_url = station["url"]
-            display_name = f"{station['emoji']} {station['name']}"
-        elif sender.startswith("http://") or sender.startswith("https://"):
-            stream_url = sender
-            display_name = f"📻 {sender}"
-        else:
-            names = "\n".join(f"• `{k}` — {v['emoji']} {v['name']}" for k, v in RADIO_STATIONS.items())
-            return await interaction.response.send_message(
-                f"Sender `{sender}` nicht gefunden. Verfügbare Sender:\n{names}\n\nOder gib eine direkte Stream-URL an."
-            )
-
-        if voice_client.is_playing():
-            voice_client.stop()
-
-        self.get_player(interaction.guild.id).current = None
-
-        source = discord.PCMVolumeTransformer(
-            discord.FFmpegPCMAudio(
-                stream_url,
-                before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                options="-vn",
-            ),
-            volume=self.get_player(interaction.guild.id).volume,
-        )
-        voice_client.play(source)
-
-        embed = discord.Embed(
-            title="📻 Radio",
-            description=f"**{display_name}** läuft jetzt!",
-            color=discord.Color.orange(),
-        )
-        embed.set_footer(text="Mit /stop kannst du das Radio beenden.")
-        await interaction.response.send_message(embed=embed)
-
-    @app_commands.command(name="radiolist", description="Zeigt alle verfügbaren Radiosender")
-    async def radiolist(self, interaction: discord.Interaction):
-        if not await check_permission(interaction):
-            return
-        embed = discord.Embed(title="📻 Verfügbare Radiosender", color=discord.Color.orange())
-        lines = [f"{v['emoji']} **{v['name']}** — `/radio {k}`" for k, v in RADIO_STATIONS.items()]
-        embed.description = "\n".join(lines)
-        embed.set_footer(text="Du kannst auch direkt eine Stream-URL angeben: /radio https://...")
-        await interaction.response.send_message(embed=embed)
 
 
 async def setup(bot: commands.Bot):
