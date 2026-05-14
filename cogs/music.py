@@ -12,7 +12,7 @@ from collections import deque
 RADIO_STATIONS: dict[str, dict] = {
     "ballermann": {
         "name": "Ballermann Radio",
-        "url": "https://stream.laut.fm/ballermann",
+        "url": "https://stream.bmr-radio.de/ballermann-radio.mp3",
         "emoji": "🍺",
     },
     "1live": {

@@ -49,20 +49,25 @@ async def _auto_start_radio():
         print(f"[Auto-Radio] Voice-Channel {AUTO_VOICE_CHANNEL_ID} nicht gefunden.")
         return
 
-    # Tell Discord we are leaving any voice channel first to clear stale session
-    print("[Auto-Radio] Lösche alte Voice-Session bei Discord...")
-    await guild.change_voice_state(channel=None)
-    await asyncio.sleep(2)
+    # Wait for discord.py's auto-reconnect to finish (it retries ~25s after restart)
+    print("[Auto-Radio] Warte auf stabile Voice-Verbindung...")
+    await asyncio.sleep(30)
 
-    if guild.voice_client:
-        await guild.voice_client.disconnect(force=True)
-
-    print(f"[Auto-Radio] Verbinde mit #{channel.name}...")
-    voice_client = await channel.connect()
+    vc = guild.voice_client
+    if vc is not None and vc.is_connected():
+        # discord.py already reconnected — use that connection
+        print(f"[Auto-Radio] Nutze bestehende Verbindung in #{vc.channel.name}")
+        if vc.channel.id != channel.id:
+            await vc.move_to(channel)
+            vc = guild.voice_client
+    else:
+        # No connection yet — connect fresh
+        print(f"[Auto-Radio] Verbinde mit #{channel.name}...")
+        vc = await channel.connect()
 
     music_cog = bot.cogs.get("MusicCog")
     if music_cog:
-        await music_cog.start_radio(guild, voice_client, AUTO_RADIO)
+        await music_cog.start_radio(guild, vc, AUTO_RADIO)
         print(f"[Auto-Radio] Starte '{AUTO_RADIO}' in #{channel.name}")
     else:
         print("[Auto-Radio] MusicCog nicht gefunden!")
