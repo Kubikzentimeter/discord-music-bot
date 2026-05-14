@@ -323,8 +323,13 @@ class MusicCog(commands.Cog):
         except Exception as e:
             return await interaction.followup.send(f"Konnte nicht verbinden: {e}")
 
-        if voice_client.is_playing():
-            voice_client.stop()
+        # Immer den aktuellen Voice-Client vom Guild holen
+        vc = interaction.guild.voice_client
+        if vc is None:
+            return await interaction.followup.send("Verbindungsfehler — bitte nochmal versuchen.")
+
+        if vc.is_playing():
+            vc.stop()
             await asyncio.sleep(0.5)
 
         self.get_player(interaction.guild.id).current = None
@@ -333,7 +338,7 @@ class MusicCog(commands.Cog):
             discord.FFmpegPCMAudio(stream_url, **FFMPEG_RADIO_OPTIONS),
             volume=self.get_player(interaction.guild.id).volume,
         )
-        voice_client.play(source)
+        vc.play(source)
 
         embed = discord.Embed(
             title="📻 Radio",
