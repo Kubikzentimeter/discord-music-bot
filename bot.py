@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+import asyncio
 import os
 from dotenv import load_dotenv
 
@@ -26,7 +27,18 @@ async def on_disconnect():
 
 @bot.event
 async def on_ready():
+    # Stale Voice-Sessions sofort leeren damit der 4006-Loop sich legt
+    for guild in bot.guilds:
+        try:
+            if guild.voice_client:
+                await guild.voice_client.disconnect(force=True)
+            await guild.change_voice_state(channel=None)
+            print(f"[Voice] Stale state für '{guild.name}' geleert")
+        except Exception:
+            pass
+
     if not hasattr(bot, "_extensions_loaded"):
+        await asyncio.sleep(8)  # Warten bis 4006-Storm sich legt
         await bot.load_extension("cogs.music")
         bot._extensions_loaded = True
 

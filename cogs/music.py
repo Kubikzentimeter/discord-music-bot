@@ -183,7 +183,10 @@ class MusicCog(commands.Cog):
             discord.FFmpegPCMAudio(stream_url, **FFMPEG_RADIO_OPTIONS),
             volume=self.get_volume(interaction.guild.id),
         )
-        vc.play(source)
+        try:
+            vc.play(source)
+        except discord.ClientException:
+            return await interaction.followup.send("Verbindung verloren — bitte nochmal `/radio` eingeben.")
 
         embed = discord.Embed(
             title="📻 Radio",
@@ -227,7 +230,10 @@ class MusicCog(commands.Cog):
             discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
             volume=self.get_volume(interaction.guild.id),
         )
-        vc.play(source)
+        try:
+            vc.play(source)
+        except discord.ClientException:
+            return await interaction.followup.send("Verbindung verloren — bitte nochmal `/play` eingeben.")
 
         embed = discord.Embed(
             title="▶ Spiele jetzt",
