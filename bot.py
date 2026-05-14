@@ -31,6 +31,11 @@ async def on_ready():
         print(f"Fehler beim Synchronisieren: {e}")
     print(f"Bot online als {bot.user} (ID: {bot.user.id})")
 
+    for g in bot.guilds:
+        if g.voice_client:
+            print(f"[Startup] Trenne alte Voice-Verbindung in {g.name}")
+            await g.voice_client.disconnect(force=True)
+
     if AUTO_GUILD_ID and AUTO_VOICE_CHANNEL_ID:
         await _auto_start_radio()
 

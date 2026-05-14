@@ -12,7 +12,7 @@ from collections import deque
 RADIO_STATIONS: dict[str, dict] = {
     "ballermann": {
         "name": "Ballermann Radio",
-        "url": "https://www.ballermann-radio.de/stream/ballermannradio/",
+        "url": "https://stream.laut.fm/ballermann",
         "emoji": "🍺",
     },
     "1live": {
@@ -76,6 +76,10 @@ YTDL_OPTIONS = {
     "no_warnings": True,
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
+    "extractor_args": {"youtube": {"player_client": ["ios", "web"]}},
+    "http_headers": {
+        "User-Agent": "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)"
+    },
 }
 
 FFMPEG_OPTIONS = {
