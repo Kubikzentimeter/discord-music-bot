@@ -101,16 +101,26 @@ async def get_voice_client(interaction: discord.Interaction) -> discord.VoiceCli
             pass
 
     await interaction.guild.change_voice_state(channel=None)
-    await asyncio.sleep(3)
+    await asyncio.sleep(5)
 
-    try:
-        vc = await target.connect()
-        print(f"[Voice] Verbunden mit #{target.name}")
-        return vc
-    except Exception as e:
-        print(f"[Voice] Fehler: {e}")
-        await interaction.followup.send(f"Konnte nicht verbinden: {e}")
-        return None
+    for attempt in range(3):
+        try:
+            vc = await target.connect()
+            await asyncio.sleep(1)
+            if vc.is_connected():
+                print(f"[Voice] Verbunden mit #{target.name} (Versuch {attempt + 1})")
+                return vc
+            print(f"[Voice] Verbindung sofort getrennt (Versuch {attempt + 1}), wiederhole...")
+            try:
+                await vc.disconnect(force=True)
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"[Voice] Fehler (Versuch {attempt + 1}): {e}")
+        await asyncio.sleep(3)
+
+    await interaction.followup.send("Konnte nicht verbinden — bitte nochmal versuchen.")
+    return None
 
 
 class MusicCog(commands.Cog):
@@ -162,6 +172,9 @@ class MusicCog(commands.Cog):
         if vc is None:
             return
 
+        if not vc.is_connected():
+            return await interaction.followup.send("Verbindung verloren — bitte nochmal versuchen.")
+
         if vc.is_playing():
             vc.stop()
             await asyncio.sleep(0.3)
@@ -202,6 +215,9 @@ class MusicCog(commands.Cog):
             title = data.get("title", "Unbekannt")
         except Exception as e:
             return await interaction.followup.send(f"Fehler beim Laden: {e}")
+
+        if not vc.is_connected():
+            return await interaction.followup.send("Verbindung verloren — bitte nochmal versuchen.")
 
         if vc.is_playing():
             vc.stop()
