@@ -100,15 +100,32 @@ class MusicCog(commands.Cog):
     async def _connect(self, interaction: discord.Interaction) -> discord.VoiceClient | None:
         target = interaction.user.voice.channel
         guild = interaction.guild
-        existing = guild.voice_client
-        if existing:
+        vc = guild.voice_client
+
+        # Bereits im richtigen Channel — kein disconnect/reconnect nötig
+        if vc and vc.is_connected() and vc.channel.id == target.id:
+            print(f"[Voice] Verwende bestehende Verbindung #{target.name}")
+            if vc.is_playing():
+                vc.stop()
+            return vc
+
+        # Falscher Channel — wechseln
+        if vc and vc.is_connected():
+            print(f"[Voice] Wechsle zu #{target.name}")
+            await vc.move_to(target)
+            return guild.voice_client
+
+        # Verbindung existiert aber nicht connected — trennen und neu
+        if vc:
             try:
-                await existing.disconnect(force=True)
+                await vc.disconnect(force=True)
             except Exception:
                 pass
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
+
+        # Frisch verbinden
         try:
-            vc = await target.connect(timeout=30)
+            vc = await target.connect(timeout=30, self_deaf=True)
             print(f"[Voice] Verbunden mit #{target.name}")
             return vc
         except Exception as e:
