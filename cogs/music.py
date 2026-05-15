@@ -102,25 +102,60 @@ class MusicCog(commands.Cog):
         guild = interaction.guild
         vc = guild.voice_client
 
-        # Bereits im richtigen Channel — einfach weiterverwenden
+        # Stabiler VoiceClient im richtigen Channel — direkt verwenden
         if vc and vc.is_connected() and vc.channel.id == target.id:
             print(f"[Voice] Verwende bestehende Verbindung #{target.name}")
             if vc.is_playing():
                 vc.stop()
             return vc
 
-        # Anderer Channel — wechseln
-        if vc and vc.is_connected():
-            print(f"[Voice] Wechsle zu #{target.name}")
-            await vc.move_to(target)
-            return guild.voice_client
-
-        # Nicht verbunden — trennen falls nötig, neu verbinden
+        # Stale VoiceClient killen (silent — kein Gateway-LEAVE hier)
         if vc:
+            vc_conn = getattr(vc, "_connection", None)
+            if vc_conn:
+                async def _noop(): pass
+                vc_conn.reconnect = _noop
             try:
-                await vc.disconnect(force=True)
+                runner = getattr(vc_conn, "_runner", None)
+                if runner and not runner.done():
+                    runner.cancel()
+                    try:
+                        await asyncio.wait_for(asyncio.shield(runner), timeout=2.0)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        pass
             except Exception:
                 pass
+            try:
+                ws = getattr(vc_conn, "ws", None)
+                if ws:
+                    await ws.close(1000)
+            except Exception:
+                pass
+            self.bot._connection._voice_clients.pop(guild.id, None)
+
+        # Nur LEAVE senden wenn Bot laut Discord noch in einem Channel ist
+        me = guild.me
+        if me and me.voice and me.voice.channel:
+            left_event = asyncio.Event()
+
+            async def _on_leave(member, before, after):
+                if member == self.bot.user and after.channel is None:
+                    left_event.set()
+
+            self.bot.add_listener(_on_leave, "on_voice_state_update")
+            try:
+                await guild.change_voice_state(channel=None)
+                await asyncio.wait_for(left_event.wait(), timeout=5.0)
+                print("[Voice] LEAVE von Discord bestätigt")
+                await asyncio.sleep(1)
+            except asyncio.TimeoutError:
+                print("[Voice] LEAVE-Timeout — verbinde trotzdem")
+            except Exception as e:
+                print(f"[Voice] LEAVE-Fehler: {e}")
+            finally:
+                self.bot.remove_listener(_on_leave, "on_voice_state_update")
+        else:
+            print("[Voice] Bot ist laut Discord nicht in Channel — kein LEAVE nötig")
 
         # Frisch verbinden
         try:
