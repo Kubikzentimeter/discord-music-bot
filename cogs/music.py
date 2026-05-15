@@ -84,35 +84,6 @@ def has_permission(interaction: discord.Interaction) -> bool:
     return bool({r.id for r in interaction.user.roles} & ALLOWED_ROLE_IDS)
 
 
-async def get_voice_client(interaction: discord.Interaction) -> discord.VoiceClient | None:
-    if not interaction.user.voice:
-        await interaction.followup.send("Du musst in einem Voice-Channel sein!")
-        return None
-
-    target = interaction.user.voice.channel
-    existing = interaction.guild.voice_client
-    if existing:
-        try:
-            await existing.disconnect(force=True)
-        except Exception:
-            pass
-        await asyncio.sleep(2)
-
-    try:
-        vc = await target.connect(timeout=30)
-        await asyncio.sleep(2)
-        if vc.is_connected():
-            print(f"[Voice] Verbunden mit #{target.name}")
-            return vc
-        print("[Voice] Verbindung sofort getrennt")
-        await interaction.followup.send("Verbindung instabil — bitte nochmal versuchen.")
-        return None
-    except Exception as e:
-        print(f"[Voice] Fehler: {e}")
-        await interaction.followup.send(f"Konnte nicht verbinden: {e}")
-        return None
-
-
 class MusicCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -121,18 +92,29 @@ class MusicCog(commands.Cog):
     def get_volume(self, guild_id: int) -> float:
         return self.volume.get(guild_id, 0.5)
 
-    async def start_radio(self, guild: discord.Guild, vc: discord.VoiceClient, station_key: str):
-        station = RADIO_STATIONS.get(station_key.lower())
-        if not station:
-            print(f"[Radio] Unbekannter Sender: {station_key}")
-            return
-        if vc.is_playing():
-            vc.stop()
-        source = discord.PCMVolumeTransformer(
-            discord.FFmpegPCMAudio(station["url"], **FFMPEG_RADIO_OPTIONS),
-            volume=self.get_volume(guild.id),
-        )
-        vc.play(source)
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        if member == self.bot.user:
+            print(f"[Voice Event] Bot: #{before.channel} → #{after.channel}")
+
+    async def _connect(self, interaction: discord.Interaction) -> discord.VoiceClient | None:
+        target = interaction.user.voice.channel
+        guild = interaction.guild
+        existing = guild.voice_client
+        if existing:
+            try:
+                await existing.disconnect(force=True)
+            except Exception:
+                pass
+            await asyncio.sleep(1)
+        try:
+            vc = await target.connect(timeout=30)
+            print(f"[Voice] Verbunden mit #{target.name}")
+            return vc
+        except Exception as e:
+            print(f"[Voice] Fehler: {e}")
+            await interaction.followup.send(f"Konnte nicht verbinden: {e}")
+            return None
 
     @app_commands.command(name="radio", description="Spielt einen Radiosender ab")
     @app_commands.describe(sender="z.B. ballermann, 1live, bayern3, antenne, energy, bob, sunshine, bigfm")
@@ -158,25 +140,19 @@ class MusicCog(commands.Cog):
             )
 
         await interaction.response.defer()
-        vc = await get_voice_client(interaction)
+        vc = await self._connect(interaction)
         if vc is None:
             return
 
-        if not vc.is_connected():
-            return await interaction.followup.send("Verbindung verloren — bitte nochmal versuchen.")
-
-        if vc.is_playing():
-            vc.stop()
-            await asyncio.sleep(0.3)
-
+        # Play SOFORT nach connect — kein Sleep dazwischen
         source = discord.PCMVolumeTransformer(
             discord.FFmpegPCMAudio(stream_url, **FFMPEG_RADIO_OPTIONS),
             volume=self.get_volume(interaction.guild.id),
         )
         try:
             vc.play(source)
-        except discord.ClientException:
-            return await interaction.followup.send("Verbindung verloren — bitte nochmal `/radio` eingeben.")
+        except discord.ClientException as e:
+            return await interaction.followup.send(f"Fehler beim Abspielen: {e}")
 
         embed = discord.Embed(
             title="📻 Radio",
@@ -195,9 +171,6 @@ class MusicCog(commands.Cog):
             return await interaction.response.send_message("Du musst in einem Voice-Channel sein!", ephemeral=True)
 
         await interaction.response.defer()
-        vc = await get_voice_client(interaction)
-        if vc is None:
-            return
 
         try:
             loop = asyncio.get_event_loop()
@@ -209,21 +182,19 @@ class MusicCog(commands.Cog):
         except Exception as e:
             return await interaction.followup.send(f"Fehler beim Laden: {e}")
 
-        if not vc.is_connected():
-            return await interaction.followup.send("Verbindung verloren — bitte nochmal versuchen.")
+        vc = await self._connect(interaction)
+        if vc is None:
+            return
 
-        if vc.is_playing():
-            vc.stop()
-            await asyncio.sleep(0.3)
-
+        # Play SOFORT nach connect
         source = discord.PCMVolumeTransformer(
             discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
             volume=self.get_volume(interaction.guild.id),
         )
         try:
             vc.play(source)
-        except discord.ClientException:
-            return await interaction.followup.send("Verbindung verloren — bitte nochmal `/play` eingeben.")
+        except discord.ClientException as e:
+            return await interaction.followup.send(f"Fehler beim Abspielen: {e}")
 
         embed = discord.Embed(
             title="▶ Spiele jetzt",
