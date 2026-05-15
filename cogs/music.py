@@ -102,50 +102,25 @@ class MusicCog(commands.Cog):
         guild = interaction.guild
         vc = guild.voice_client
 
+        # Bereits im richtigen Channel — einfach weiterverwenden
+        if vc and vc.is_connected() and vc.channel.id == target.id:
+            print(f"[Voice] Verwende bestehende Verbindung #{target.name}")
+            if vc.is_playing():
+                vc.stop()
+            return vc
+
+        # Anderer Channel — wechseln
+        if vc and vc.is_connected():
+            print(f"[Voice] Wechsle zu #{target.name}")
+            await vc.move_to(target)
+            return guild.voice_client
+
+        # Nicht verbunden — trennen falls nötig, neu verbinden
         if vc:
-            vc_conn = getattr(vc, "_connection", None)
-
-            # 1. reconnect() auf No-Op patchen — verhindert neue Runner nach WS-Close
-            if vc_conn:
-                async def _noop_reconnect():
-                    pass
-                vc_conn.reconnect = _noop_reconnect
-                print("[Voice] reconnect() deaktiviert")
-
-            # 2. Runner canceln und warten
             try:
-                runner = getattr(vc_conn, "_runner", None)
-                if runner and not runner.done():
-                    runner.cancel()
-                    try:
-                        await asyncio.wait_for(asyncio.shield(runner), timeout=2.0)
-                    except (asyncio.CancelledError, asyncio.TimeoutError):
-                        pass
-                    print("[Voice] Runner gestoppt")
-            except Exception as e:
-                print(f"[Voice] Runner-Fehler: {e}")
-
-            # 3. Voice-WebSocket direkt schließen (kein Gateway-LEAVE)
-            try:
-                ws = getattr(vc_conn, "ws", None)
-                if ws:
-                    await ws.close(1000)
+                await vc.disconnect(force=True)
             except Exception:
                 pass
-
-            # 4. Aus Registry entfernen
-            self.bot._connection._voice_clients.pop(guild.id, None)
-
-        # 5. Genau EIN LEAVE an Discord Gateway senden
-        print("[Voice] Sende LEAVE, warte 5s...")
-        try:
-            await guild.change_voice_state(channel=None)
-        except Exception:
-            pass
-        await asyncio.sleep(5)
-
-        # 6. Finaler Registry-Check
-        self.bot._connection._voice_clients.pop(guild.id, None)
 
         # Frisch verbinden
         try:
