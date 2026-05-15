@@ -29,65 +29,53 @@ async def graceful_shutdown():
     await bot.close()
 
 
+async def _kill_stale_voice(guild):
+    """Killt stale VoiceClient komplett ohne Gateway-Nachrichten zu senden."""
+    vc = guild.voice_client
+    if not vc:
+        return
+    try:
+        vc_conn = getattr(vc, "_connection", None)
+        runner = getattr(vc_conn, "_runner", None)
+        if runner and not runner.done():
+            runner.cancel()
+            try:
+                await asyncio.wait_for(asyncio.shield(runner), timeout=2.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+            print(f"[Startup] Runner gecancelt: {guild.name}")
+    except Exception as e:
+        print(f"[Startup] Runner-Fehler: {e}")
+    try:
+        vc_conn = getattr(vc, "_connection", None)
+        ws = getattr(vc_conn, "ws", None)
+        if ws:
+            await ws.close(1000)
+    except Exception:
+        pass
+    try:
+        bot._connection._voice_clients.pop(guild.id, None)
+        print(f"[Startup] VoiceClient entfernt: {guild.name}")
+    except Exception as e:
+        print(f"[Startup] Registry-Fehler: {e}")
+
+
 @bot.event
 async def on_ready():
     if not hasattr(bot, "_extensions_loaded"):
-        # Block VOICE_SERVER_UPDATE so the 4006 reconnect loop can never complete
-        conn = bot._connection
-        original_handler = conn.parsers.get("VOICE_SERVER_UPDATE")
-        conn.parsers["VOICE_SERVER_UPDATE"] = lambda data: print("[Voice] VOICE_SERVER_UPDATE blockiert (Startup)")
-
-        # Clear any stale voice sessions
+        # Stale VoiceClients killen
         for guild in bot.guilds:
-            try:
-                if guild.voice_client:
-                    await guild.voice_client.disconnect(force=True)
-                await guild.change_voice_state(channel=None)
-            except Exception:
-                pass
+            await _kill_stale_voice(guild)
 
-        print("[Startup] Warte 35s bis 4006-Storm abklingt...")
-        await asyncio.sleep(35)
-
-        # Nuke all stale voice connections completely
+        # Discord-seitig aus allen Channels austreten
         for guild in bot.guilds:
-            vc = guild.voice_client
-            if vc:
-                # 1. Cancel the reconnect runner task
-                try:
-                    vc_conn = getattr(vc, "_connection", None)
-                    runner = getattr(vc_conn, "_runner", None)
-                    if runner and not runner.done():
-                        runner.cancel()
-                        print(f"[Startup] Runner gecancelt: {guild.name}")
-                except Exception as e:
-                    print(f"[Startup] Runner-Fehler: {e}")
-                # 2. Close the voice websocket
-                try:
-                    vc_conn = getattr(vc, "_connection", None)
-                    ws = getattr(vc_conn, "ws", None)
-                    if ws:
-                        await ws.close(4000)
-                except Exception:
-                    pass
-                # 3. Remove VoiceClient from discord.py's internal registry
-                try:
-                    conn._voice_clients.pop(guild.id, None)
-                    print(f"[Startup] VoiceClient entfernt: {guild.name}")
-                except Exception as e:
-                    print(f"[Startup] Registry-Fehler: {e}")
-            # 4. Tell Discord gateway: leave all voice channels
             try:
                 await guild.change_voice_state(channel=None)
             except Exception:
                 pass
 
         await asyncio.sleep(3)
-
-        # Restore handler and load cog
-        if original_handler:
-            conn.parsers["VOICE_SERVER_UPDATE"] = original_handler
-        print("[Startup] VOICE_SERVER_UPDATE wiederhergestellt")
+        print("[Startup] Voice-Cleanup abgeschlossen")
 
         await bot.load_extension("cogs.music")
         bot._extensions_loaded = True

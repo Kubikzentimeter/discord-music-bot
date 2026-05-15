@@ -102,37 +102,48 @@ class MusicCog(commands.Cog):
         guild = interaction.guild
         vc = guild.voice_client
 
-        # Stale VoiceClient komplett killen (4006-Loop stoppen)
         if vc:
+            # Runner canceln und warten bis er wirklich stoppt
             try:
                 vc_conn = getattr(vc, "_connection", None)
                 runner = getattr(vc_conn, "_runner", None)
                 if runner and not runner.done():
                     runner.cancel()
-                    print("[Voice] Stale Runner gecancelt")
+                    try:
+                        await asyncio.wait_for(asyncio.shield(runner), timeout=2.0)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        pass
+                    print("[Voice] Stale Runner gestoppt")
+            except Exception as e:
+                print(f"[Voice] Runner-Fehler: {e}")
+
+            # Voice-WebSocket direkt schließen (kein Gateway-LEAVE)
+            try:
+                vc_conn = getattr(vc, "_connection", None)
+                ws = getattr(vc_conn, "ws", None)
+                if ws:
+                    await ws.close(1000)
             except Exception:
                 pass
+
+            # Aus discord.py-Registry entfernen
             try:
                 self.bot._connection._voice_clients.pop(guild.id, None)
             except Exception:
                 pass
+
+            # Genau EIN LEAVE an Discord Gateway senden
+            print("[Voice] Sende LEAVE, warte 5s...")
             try:
-                await vc.disconnect(force=True)
+                await guild.change_voice_state(channel=None)
             except Exception:
                 pass
+            await asyncio.sleep(5)
 
-        # Discord-seitig LEAVE senden und warten bis verarbeitet
-        try:
-            await guild.change_voice_state(channel=None)
-        except Exception:
-            pass
-        print("[Voice] Warte 3s bis Discord Voice-State geleert...")
-        await asyncio.sleep(3)
-
-        # Frisch verbinden — jetzt ohne stale Session
+        # Frisch verbinden
         try:
             vc = await target.connect(timeout=30, self_deaf=True)
-            print(f"[Voice] Verbunden mit #{target.name}")
+            print(f"[Voice] Verbunden mit #{target.name} | connected={vc.is_connected()}")
             return vc
         except Exception as e:
             print(f"[Voice] Fehler: {e}")
@@ -167,14 +178,22 @@ class MusicCog(commands.Cog):
         if vc is None:
             return
 
-        # Play SOFORT nach connect — kein Sleep dazwischen
         source = discord.PCMVolumeTransformer(
             discord.FFmpegPCMAudio(stream_url, **FFMPEG_RADIO_OPTIONS),
             volume=self.get_volume(interaction.guild.id),
         )
+
+        def after_play(error):
+            if error:
+                print(f"[Voice] Playback-Fehler: {error}")
+            else:
+                print("[Voice] Playback beendet")
+
         try:
-            vc.play(source)
+            vc.play(source, after=after_play)
+            print(f"[Voice] play() aufgerufen | playing={vc.is_playing()} connected={vc.is_connected()}")
         except discord.ClientException as e:
+            print(f"[Voice] ClientException bei play(): {e}")
             return await interaction.followup.send(f"Fehler beim Abspielen: {e}")
 
         embed = discord.Embed(
@@ -209,13 +228,20 @@ class MusicCog(commands.Cog):
         if vc is None:
             return
 
-        # Play SOFORT nach connect
         source = discord.PCMVolumeTransformer(
             discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
             volume=self.get_volume(interaction.guild.id),
         )
+
+        def after_play(error):
+            if error:
+                print(f"[Voice] Playback-Fehler: {error}")
+            else:
+                print("[Voice] Playback beendet")
+
         try:
-            vc.play(source)
+            vc.play(source, after=after_play)
+            print(f"[Voice] play() aufgerufen | playing={vc.is_playing()} connected={vc.is_connected()}")
         except discord.ClientException as e:
             return await interaction.followup.send(f"Fehler beim Abspielen: {e}")
 
