@@ -49,6 +49,28 @@ async def on_ready():
         print("[Startup] Warte 35s bis 4006-Storm abklingt...")
         await asyncio.sleep(35)
 
+        # Cancel stale voice reconnect runners and disconnect
+        for guild in bot.guilds:
+            vc = guild.voice_client
+            if vc:
+                try:
+                    runner = getattr(vc._connection, "_runner", None)
+                    if runner and not runner.done():
+                        runner.cancel()
+                        print(f"[Startup] Voice-Runner gecancelt ({guild.name})")
+                except Exception as e:
+                    print(f"[Startup] Runner-Cancel Fehler: {e}")
+                try:
+                    await vc.disconnect(force=True)
+                except Exception:
+                    pass
+        for guild in bot.guilds:
+            try:
+                await guild.change_voice_state(channel=None)
+            except Exception:
+                pass
+        await asyncio.sleep(2)
+
         # Restore handler and load cog
         if original_handler:
             conn.parsers["VOICE_SERVER_UPDATE"] = original_handler
