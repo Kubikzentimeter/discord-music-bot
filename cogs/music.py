@@ -103,9 +103,17 @@ class MusicCog(commands.Cog):
         vc = guild.voice_client
 
         if vc:
-            # Runner canceln und warten bis er wirklich stoppt
+            vc_conn = getattr(vc, "_connection", None)
+
+            # 1. reconnect() auf No-Op patchen — verhindert neue Runner nach WS-Close
+            if vc_conn:
+                async def _noop_reconnect():
+                    pass
+                vc_conn.reconnect = _noop_reconnect
+                print("[Voice] reconnect() deaktiviert")
+
+            # 2. Runner canceln und warten
             try:
-                vc_conn = getattr(vc, "_connection", None)
                 runner = getattr(vc_conn, "_runner", None)
                 if runner and not runner.done():
                     runner.cancel()
@@ -113,34 +121,30 @@ class MusicCog(commands.Cog):
                         await asyncio.wait_for(asyncio.shield(runner), timeout=2.0)
                     except (asyncio.CancelledError, asyncio.TimeoutError):
                         pass
-                    print("[Voice] Stale Runner gestoppt")
+                    print("[Voice] Runner gestoppt")
             except Exception as e:
                 print(f"[Voice] Runner-Fehler: {e}")
 
-            # Voice-WebSocket direkt schließen (kein Gateway-LEAVE)
+            # 3. Voice-WebSocket direkt schließen (kein Gateway-LEAVE)
             try:
-                vc_conn = getattr(vc, "_connection", None)
                 ws = getattr(vc_conn, "ws", None)
                 if ws:
                     await ws.close(1000)
             except Exception:
                 pass
 
-            # Aus discord.py-Registry entfernen
-            try:
-                self.bot._connection._voice_clients.pop(guild.id, None)
-            except Exception:
-                pass
+            # 4. Aus Registry entfernen
+            self.bot._connection._voice_clients.pop(guild.id, None)
 
-            # Genau EIN LEAVE an Discord Gateway senden
-            print("[Voice] Sende LEAVE, warte 5s...")
-            try:
-                await guild.change_voice_state(channel=None)
-            except Exception:
-                pass
-            await asyncio.sleep(5)
+        # 5. Genau EIN LEAVE an Discord Gateway senden
+        print("[Voice] Sende LEAVE, warte 5s...")
+        try:
+            await guild.change_voice_state(channel=None)
+        except Exception:
+            pass
+        await asyncio.sleep(5)
 
-        # Letzter Registry-Check: VoiceClient der sich während des Sleeps eingeschlichen hat entfernen
+        # 6. Finaler Registry-Check
         self.bot._connection._voice_clients.pop(guild.id, None)
 
         # Frisch verbinden
