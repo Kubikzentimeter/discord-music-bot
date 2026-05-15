@@ -15,6 +15,20 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# setup_hook läuft BEVOR der Bot sich mit dem Gateway verbindet
+# → VOICE_SERVER_UPDATE ist blockiert bevor das erste Event ankommt
+_original_setup_hook = bot.setup_hook
+
+async def _patched_setup_hook():
+    await _original_setup_hook()
+    conn = bot._connection
+    original_vsup = conn.parsers.get("VOICE_SERVER_UPDATE")
+    bot._original_vsup_handler = original_vsup
+    conn.parsers["VOICE_SERVER_UPDATE"] = lambda data: print("[Startup] VOICE_SERVER_UPDATE blockiert (pre-connect)")
+    print("[Startup] VOICE_SERVER_UPDATE vor Gateway-Verbindung blockiert")
+
+bot.setup_hook = _patched_setup_hook
+
 
 async def graceful_shutdown():
     print("[Shutdown] Verlasse alle Voice-Channels...")
@@ -34,48 +48,7 @@ async def on_ready():
     if not hasattr(bot, "_extensions_loaded"):
         conn = bot._connection
 
-        # 1. VOICE_SERVER_UPDATE sofort blockieren
-        original_handler = conn.parsers.get("VOICE_SERVER_UPDATE")
-        conn.parsers["VOICE_SERVER_UPDATE"] = lambda data: print("[Startup] VOICE_SERVER_UPDATE blockiert")
-        print("[Startup] VOICE_SERVER_UPDATE blockiert")
-
-        # 2. Warten bis VoiceConnectionState erzeugt wurde (aus initial gateway events)
-        await asyncio.sleep(5)
-
-        # 3. Alle stale VoiceClients komplett killen
-        for guild in bot.guilds:
-            vc = guild.voice_client
-            if vc:
-                vc_conn = getattr(vc, "_connection", None)
-                # reconnect auf No-Op — verhindert neue Runner nach WS-Close
-                if vc_conn:
-                    async def _noop():
-                        pass
-                    vc_conn.reconnect = _noop
-                # Runner canceln
-                try:
-                    runner = getattr(vc_conn, "_runner", None)
-                    if runner and not runner.done():
-                        runner.cancel()
-                        try:
-                            await asyncio.wait_for(asyncio.shield(runner), timeout=2.0)
-                        except (asyncio.CancelledError, asyncio.TimeoutError):
-                            pass
-                        print(f"[Startup] Runner gecancelt: {guild.name}")
-                except Exception as e:
-                    print(f"[Startup] Runner-Fehler: {e}")
-                # WS schließen
-                try:
-                    ws = getattr(vc_conn, "ws", None)
-                    if ws:
-                        await ws.close(1000)
-                except Exception:
-                    pass
-                # Aus Registry entfernen
-                conn._voice_clients.pop(guild.id, None)
-                print(f"[Startup] VoiceClient entfernt: {guild.name}")
-
-        # 4. Discord-seitig aus allen Channels austreten
+        # Discord-seitig aus allen Channels austreten (kein VoiceClient existiert → kein 4006-Loop)
         for guild in bot.guilds:
             try:
                 await guild.change_voice_state(channel=None)
@@ -83,10 +56,10 @@ async def on_ready():
             except Exception:
                 pass
 
-        # 5. Warten bis Discord das LEAVE verarbeitet hat
-        await asyncio.sleep(5)
+        await asyncio.sleep(3)
 
-        # 6. Handler wiederherstellen — jetzt kein stale VoiceClient mehr im Registry
+        # VOICE_SERVER_UPDATE wiederherstellen — jetzt ohne stale Session
+        original_handler = getattr(bot, "_original_vsup_handler", None)
         if original_handler:
             conn.parsers["VOICE_SERVER_UPDATE"] = original_handler
         print("[Startup] VOICE_SERVER_UPDATE wiederhergestellt — kein 4006-Loop möglich")
