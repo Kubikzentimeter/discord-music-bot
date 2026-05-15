@@ -102,28 +102,34 @@ class MusicCog(commands.Cog):
         guild = interaction.guild
         vc = guild.voice_client
 
-        # Bereits im richtigen Channel — kein disconnect/reconnect nötig
-        if vc and vc.is_connected() and vc.channel.id == target.id:
-            print(f"[Voice] Verwende bestehende Verbindung #{target.name}")
-            if vc.is_playing():
-                vc.stop()
-            return vc
-
-        # Falscher Channel — wechseln
-        if vc and vc.is_connected():
-            print(f"[Voice] Wechsle zu #{target.name}")
-            await vc.move_to(target)
-            return guild.voice_client
-
-        # Verbindung existiert aber nicht connected — trennen und neu
+        # Stale VoiceClient komplett killen (4006-Loop stoppen)
         if vc:
+            try:
+                vc_conn = getattr(vc, "_connection", None)
+                runner = getattr(vc_conn, "_runner", None)
+                if runner and not runner.done():
+                    runner.cancel()
+                    print("[Voice] Stale Runner gecancelt")
+            except Exception:
+                pass
+            try:
+                self.bot._connection._voice_clients.pop(guild.id, None)
+            except Exception:
+                pass
             try:
                 await vc.disconnect(force=True)
             except Exception:
                 pass
-            await asyncio.sleep(2)
 
-        # Frisch verbinden
+        # Discord-seitig LEAVE senden und warten bis verarbeitet
+        try:
+            await guild.change_voice_state(channel=None)
+        except Exception:
+            pass
+        print("[Voice] Warte 3s bis Discord Voice-State geleert...")
+        await asyncio.sleep(3)
+
+        # Frisch verbinden — jetzt ohne stale Session
         try:
             vc = await target.connect(timeout=30, self_deaf=True)
             print(f"[Voice] Verbunden mit #{target.name}")
