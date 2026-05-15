@@ -140,6 +140,9 @@ class MusicCog(commands.Cog):
                 pass
             await asyncio.sleep(5)
 
+        # Letzter Registry-Check: VoiceClient der sich während des Sleeps eingeschlichen hat entfernen
+        self.bot._connection._voice_clients.pop(guild.id, None)
+
         # Frisch verbinden
         try:
             vc = await target.connect(timeout=30, self_deaf=True)
