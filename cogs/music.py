@@ -50,6 +50,7 @@ ALLOWED_USER_IDS: set[int] = {int(x) for x in _raw_users.split(",") if x.strip()
 
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
+    "prefer_free_formats": True,
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
