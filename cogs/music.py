@@ -46,6 +46,11 @@ RADIO_STATIONS: dict[str, dict] = {
         "url": "https://dispatcher.rndfnk.com/br/br3/live/mp3/low",
         "emoji": "📻",
     },
+    "bollerwagen": {
+        "name": "Radio Bollerwagen",
+        "url": "http://player.ffn.de/radiobollerwagen.mp3",
+        "emoji": "🍺",
+    },
 }
 
 _raw_roles = os.getenv("ALLOWED_ROLE_IDS", "")
