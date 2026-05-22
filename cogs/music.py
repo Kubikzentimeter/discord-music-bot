@@ -49,15 +49,14 @@ ALLOWED_ROLE_IDS: set[int] = {int(x) for x in _raw_roles.split(",") if x.strip()
 ALLOWED_USER_IDS: set[int] = {int(x) for x in _raw_users.split(",") if x.strip()}
 
 YTDL_OPTIONS = {
-    "format": "bestaudio/best",
-    "prefer_free_formats": True,
+    "format": "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
     "cookiefile": "/root/discord-bot/cookies.txt",
-    "extractor_args": {"youtube": {"player_client": ["ios", "web"]}},
+    "extractor_args": {"youtube": {"player_client": ["web"]}},
 }
 
 FFMPEG_OPTIONS = {
