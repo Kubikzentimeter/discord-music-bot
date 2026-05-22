@@ -16,11 +16,6 @@ RADIO_STATIONS: dict[str, dict] = {
         "url": "https://wdr-1live-live.icecastssl.wdr.de/wdr/1live/live/mp3/128/stream.mp3",
         "emoji": "📻",
     },
-    "antenne": {
-        "name": "Antenne Bayern",
-        "url": "https://stream.antenne.de/antenne/stream/mp3",
-        "emoji": "📻",
-    },
     "energy": {
         "name": "Energy Deutschland",
         "url": "https://stream.energy.de/energy/stream/mp3",
@@ -40,11 +35,6 @@ RADIO_STATIONS: dict[str, dict] = {
         "name": "bigFM",
         "url": "https://streams.bigfm.de/bigfm-deutschland-128-mp3",
         "emoji": "🔊",
-    },
-    "bayern3": {
-        "name": "Bayern 3",
-        "url": "https://dispatcher.rndfnk.com/br/br3/live/mp3/low",
-        "emoji": "📻",
     },
     "bollerwagen": {
         "name": "Radio Bollerwagen",
