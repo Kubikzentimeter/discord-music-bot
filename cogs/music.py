@@ -55,6 +55,7 @@ YTDL_OPTIONS = {
     "no_warnings": True,
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
+    "cookiefile": "/root/discord-bot/cookies.txt",
     "extractor_args": {"youtube": {"player_client": ["ios", "web"]}},
 }
 
