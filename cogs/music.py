@@ -96,6 +96,27 @@ class MusicCog(commands.Cog):
     async def on_voice_state_update(self, member, before, after):
         if member == self.bot.user:
             print(f"[Voice Event] Bot: #{before.channel} → #{after.channel}")
+            # Bot wurde in anderen Channel bewegt → prüfen ob erlaubt
+            if (before.channel is not None and after.channel is not None
+                    and before.channel.id != after.channel.id):
+                await asyncio.sleep(0.3)  # kurz warten bis Audit-Log aktuell ist
+                guild = member.guild
+                try:
+                    async for entry in guild.audit_logs(
+                        limit=5,
+                        action=discord.AuditLogAction.member_move,
+                    ):
+                        age = (discord.utils.utcnow() - entry.created_at).total_seconds()
+                        if age < 5 and entry.user.id != BOT_OWNER_ID:
+                            vc = guild.voice_client
+                            if vc and vc.is_connected():
+                                await vc.move_to(before.channel)
+                                print(f"[Bot-Move] Unbefugter Move von {entry.user} rückgängig gemacht")
+                        break
+                except discord.Forbidden:
+                    print("[Bot-Move] Kein Audit-Log-Zugriff — Berechtigung 'Audit-Log lesen' fehlt")
+                except Exception as e:
+                    print(f"[Bot-Move] Fehler: {e}")
             return
 
         # Gefängnis-Logik: eingesperrte User immer zurück ins Loch ziehen
