@@ -49,7 +49,7 @@ ALLOWED_ROLE_IDS: set[int] = {int(x) for x in _raw_roles.split(",") if x.strip()
 ALLOWED_USER_IDS: set[int] = {int(x) for x in _raw_users.split(",") if x.strip()}
 
 BOT_OWNER_ID = 246291642468794369
-JAIL_CHANNEL_NAME = "🕳️︱Loch"
+JAIL_CHANNEL_NAME = "🔇︱LenMc07s Büro"
 
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
