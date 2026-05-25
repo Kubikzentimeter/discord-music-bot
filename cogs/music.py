@@ -48,6 +48,9 @@ _raw_users = os.getenv("ALLOWED_USER_IDS", "")
 ALLOWED_ROLE_IDS: set[int] = {int(x) for x in _raw_roles.split(",") if x.strip()}
 ALLOWED_USER_IDS: set[int] = {int(x) for x in _raw_users.split(",") if x.strip()}
 
+BOT_OWNER_ID = 246291642468794369
+JAIL_CHANNEL_NAME = "🕳️︱Loch"
+
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
@@ -84,6 +87,7 @@ class MusicCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.volume: dict[int, float] = {}
+        self.jailed: dict[int, set[int]] = {}  # guild_id → set of jailed user IDs
 
     def get_volume(self, guild_id: int) -> float:
         return self.volume.get(guild_id, 0.5)
@@ -92,6 +96,21 @@ class MusicCog(commands.Cog):
     async def on_voice_state_update(self, member, before, after):
         if member == self.bot.user:
             print(f"[Voice Event] Bot: #{before.channel} → #{after.channel}")
+            return
+
+        # Gefängnis-Logik: eingesperrte User immer zurück ins Loch ziehen
+        guild_id = member.guild.id
+        if guild_id in self.jailed and member.id in self.jailed[guild_id]:
+            jail_channel = discord.utils.get(member.guild.voice_channels, name=JAIL_CHANNEL_NAME)
+            if jail_channel is None:
+                return
+            # User ist in einem anderen Channel als dem Loch → zurückbewegen
+            if after.channel is not None and after.channel.id != jail_channel.id:
+                try:
+                    await member.move_to(jail_channel)
+                    print(f"[Jail] {member} zurück ins Loch bewegt")
+                except Exception as e:
+                    print(f"[Jail] Fehler beim Zurückbewegen: {e}")
 
     async def _connect(self, interaction: discord.Interaction) -> discord.VoiceClient | None:
         target = interaction.user.voice.channel
@@ -289,6 +308,53 @@ class MusicCog(commands.Cog):
         if vc and vc.source:
             vc.source.volume = wert / 100
         await interaction.response.send_message(f"Lautstärke: **{wert}%** 🔊")
+
+    @app_commands.command(name="jail", description="Sperrt einen User ins Loch 🕳️")
+    @app_commands.describe(member="Der User der eingesperrt werden soll")
+    async def jail(self, interaction: discord.Interaction, member: discord.Member):
+        if interaction.user.id != BOT_OWNER_ID:
+            return await interaction.response.send_message("Keine Berechtigung.", ephemeral=True)
+
+        guild_id = interaction.guild.id
+        if guild_id not in self.jailed:
+            self.jailed[guild_id] = set()
+        self.jailed[guild_id].add(member.id)
+
+        # Sofort ins Loch bewegen falls in einem Voice-Channel
+        jail_channel = discord.utils.get(interaction.guild.voice_channels, name=JAIL_CHANNEL_NAME)
+        if jail_channel is None:
+            return await interaction.response.send_message(
+                f"⚠️ Channel `{JAIL_CHANNEL_NAME}` nicht gefunden!", ephemeral=True
+            )
+        if member.voice and member.voice.channel:
+            try:
+                await member.move_to(jail_channel)
+            except Exception as e:
+                print(f"[Jail] Fehler beim ersten Move: {e}")
+
+        embed = discord.Embed(
+            title="🕳️ Ins Loch gesperrt!",
+            description=f"{member.mention} wurde eingesperrt und kommt nicht mehr raus.",
+            color=discord.Color.dark_gray(),
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="unjail", description="Befreit einen User aus dem Loch 🔓")
+    @app_commands.describe(member="Der User der befreit werden soll")
+    async def unjail(self, interaction: discord.Interaction, member: discord.Member):
+        if interaction.user.id != BOT_OWNER_ID:
+            return await interaction.response.send_message("Keine Berechtigung.", ephemeral=True)
+
+        guild_id = interaction.guild.id
+        if guild_id in self.jailed:
+            self.jailed[guild_id].discard(member.id)
+
+        embed = discord.Embed(
+            title="🔓 Befreit!",
+            description=f"{member.mention} wurde aus dem Loch entlassen.",
+            color=discord.Color.green(),
+        )
+        await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="radiolist", description="Alle verfügbaren Radiosender anzeigen")
     async def radiolist(self, interaction: discord.Interaction):
