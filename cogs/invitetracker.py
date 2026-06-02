@@ -9,13 +9,16 @@ MOD_ROLE_ID           = 1122303908178571289
 
 
 class AssignRoleView(discord.ui.View):
-    """Zwei Knöpfe zum Vergeben von Rängen direkt aus dem Log-Channel."""
-
     def __init__(self, member: discord.Member, role1: discord.Role, role2: discord.Role):
-        super().__init__(timeout=86400)  # 24 Stunden
+        super().__init__(timeout=86400)
         self.member = member
         self.role1 = role1
         self.role2 = role2
+        # Knopf-Labels auf echten Rollennamen setzen
+        buttons = [c for c in self.children if isinstance(c, discord.ui.Button)]
+        if len(buttons) >= 2:
+            buttons[0].label = f"✅ {role1.name} vergeben"
+            buttons[1].label = f"✅ {role2.name} vergeben"
 
     def _has_perm(self, interaction: discord.Interaction) -> bool:
         user_role_ids = {r.id for r in interaction.user.roles}
@@ -53,35 +56,26 @@ class AssignRoleView(discord.ui.View):
     async def assign_role2(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._assign(interaction, button, self.role2)
 
-    async def update_labels(self):
-        """Setzt die Knopf-Labels auf den echten Rollennamen."""
-        buttons = [c for c in self.children if isinstance(c, discord.ui.Button)]
-        if len(buttons) >= 2:
-            buttons[0].label = f"✅ {self.role1.name} vergeben"
-            buttons[1].label = f"✅ {self.role2.name} vergeben"
-        except Exception as e:
-            await interaction.response.send_message(f"Fehler: {e}", ephemeral=True)
-
 
 class InviteTrackerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.invite_cache: dict[int, dict[str, int]] = {}  # guild_id → {code: uses}
+        self.invite_cache: dict[int, dict[str, int]] = {}
 
-    # ── Cache aufbauen ─────────────────────────────────────────────────────────
+    async def cog_load(self):
+        """Wird direkt beim Laden des Cogs aufgerufen — baut den Invite-Cache auf."""
+        await self.bot.wait_until_ready()
+        for guild in self.bot.guilds:
+            await self._refresh_cache(guild)
+        print(f"[InviteTracker] Cache geladen für {len(self.bot.guilds)} Server")
 
     async def _refresh_cache(self, guild: discord.Guild):
         try:
             invites = await guild.invites()
             self.invite_cache[guild.id] = {inv.code: inv.uses for inv in invites}
+            print(f"[InviteTracker] {len(invites)} Invites gecacht für {guild.name}")
         except discord.Forbidden:
-            print(f"[InviteTracker] Kein Zugriff auf Invites in {guild.name}")
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        for guild in self.bot.guilds:
-            await self._refresh_cache(guild)
-        print("[InviteTracker] Invite-Cache geladen")
+            print(f"[InviteTracker] ⚠️ Kein Zugriff auf Invites in {guild.name} — Berechtigung 'Einladungen verwalten' fehlt!")
 
     @commands.Cog.listener()
     async def on_invite_create(self, invite: discord.Invite):
@@ -91,19 +85,18 @@ class InviteTrackerCog(commands.Cog):
     async def on_invite_delete(self, invite: discord.Invite):
         await self._refresh_cache(invite.guild)
 
-    # ── Mitglied beigetreten ───────────────────────────────────────────────────
-
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
+        print(f"[InviteTracker] {member} ist beigetreten")
         log_channel = self.bot.get_channel(INVITE_LOG_CHANNEL_ID)
         if not log_channel:
+            print(f"[InviteTracker] ⚠️ Log-Channel {INVITE_LOG_CHANNEL_ID} nicht gefunden!")
             return
 
         guild = member.guild
         inviter = None
         used_invite = None
 
-        # Welcher Invite wurde genutzt? → Vergleich mit Cache
         try:
             current_invites = await guild.invites()
             cached = self.invite_cache.get(guild.id, {})
@@ -114,7 +107,7 @@ class InviteTrackerCog(commands.Cog):
                     break
             self.invite_cache[guild.id] = {inv.code: inv.uses for inv in current_invites}
         except discord.Forbidden:
-            pass
+            print("[InviteTracker] ⚠️ Keine Berechtigung Invites abzurufen")
 
         admin_role       = guild.get_role(ADMIN_ROLE_ID)
         assignable_role  = guild.get_role(ASSIGNABLE_ROLE_ID)
@@ -128,7 +121,7 @@ class InviteTrackerCog(commands.Cog):
         )
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         embed.set_thumbnail(url=member.display_avatar.url)
-        embed.add_field(name="👤 User",          value=member.mention,  inline=True)
+        embed.add_field(name="👤 User",           value=member.mention, inline=True)
         embed.add_field(name="📨 Eingeladen von", value=inviter_text,   inline=True)
         if used_invite:
             embed.add_field(
@@ -138,13 +131,16 @@ class InviteTrackerCog(commands.Cog):
             )
         embed.set_footer(text=f"User-ID: {member.id}")
 
-        ping   = admin_role.mention if admin_role else "@admin"
-        view   = None
+        ping = admin_role.mention if admin_role else "@admin"
+        view = None
         if assignable_role and assignable_role2:
             view = AssignRoleView(member, assignable_role, assignable_role2)
-            await view.update_labels()
 
-        await log_channel.send(content=ping, embed=embed, view=view)
+        try:
+            await log_channel.send(content=ping, embed=embed, view=view)
+            print(f"[InviteTracker] Nachricht gesendet für {member}")
+        except Exception as e:
+            print(f"[InviteTracker] ⚠️ Fehler beim Senden: {e}")
 
 
 async def setup(bot: commands.Bot):
