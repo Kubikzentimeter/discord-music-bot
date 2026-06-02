@@ -54,16 +54,23 @@ def _build_embed(game: dict, source: dict) -> discord.Embed:
     end_str   = _format_date(end_raw) if end_raw else "Unbekannt"
     game_url  = game.get("open_giveaway_url") or game.get("gamerpower_url", "")
 
-    # Preis-Zeile: ~~$14.99~~ **Kostenlos** bis DD.MM.YYYY
+    # Preis-Zeile: ~~$14.99~~ **Kostenlos** bis zum DD.MM.YYYY
     if worth and worth not in ("N/A", "0.00", "$0.00"):
-        price_line = f"~~{worth}~~ **Kostenlos** bis {end_str}"
+        price_line = f"~~{worth}~~ **Kostenlos bis zum {end_str}**"
     else:
-        price_line = f"**Kostenlos** bis {end_str}"
+        price_line = f"**Kostenlos bis zum {end_str}**"
 
     # Links in der Description
     links = f"[Im Browser öffnen ↗]({game_url})"
-    if source["platform"] == "epic":
-        links += "\n[Im Epic Games Launcher öffnen ↗](com.epicgames.launcher://store/free)"
+    if source["platform"] == "steam":
+        # Steam App-ID aus der URL extrahieren für den Client-Link
+        appid_match = re.search(r"store\.steampowered\.com/app/(\d+)", game_url)
+        if appid_match:
+            links += f"\n[Im Steam Client öffnen ↗](steam://store/{appid_match.group(1)})"
+        else:
+            links += f"\n[Im Steam Client öffnen ↗](steam://store/)"
+    elif source["platform"] == "epic":
+        links += f"\n[Im Epic Games Launcher öffnen ↗](com.epicgames.launcher://store/browse)"
 
     embed = discord.Embed(
         title=title,
