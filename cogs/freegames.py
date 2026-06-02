@@ -66,13 +66,6 @@ def _build_embed(game: dict, source: dict) -> discord.Embed:
         appid_match = re.search(r"store\.steampowered\.com/app/(\d+)", game_url)
         if appid_match:
             links += f"\n[Im Steam Client öffnen ↗](steam://store/{appid_match.group(1)})"
-    elif source["platform"] == "epic":
-        # Slug aus der Epic-URL extrahieren
-        slug_match = re.search(r"epicgames\.com/(?:store/(?:en-US|de)/)?(?:product|p)/([^/?#]+)", game_url)
-        if slug_match:
-            links += f"\n[Im Epic Launcher öffnen ↗](com.epicgames.launcher://apps/{slug_match.group(1)}?action=install&silent=false)"
-        else:
-            links += f"\n[Im Epic Launcher öffnen ↗](com.epicgames.launcher://store/browse)"
 
     embed = discord.Embed(
         title=title,
