@@ -11,14 +11,14 @@ SOURCES = [
         "url":      "https://www.gamerpower.com/api/giveaways?platform=steam&type=game",
         "platform": "steam",
         "color":    0x1b2838,
-        "icon":     "https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Steam_icon_logo.svg/240px-Steam_icon_logo.svg.png",
+        "icon":     "https://raw.githubusercontent.com/Kubikzentimeter/discord-music-bot/main/assets/steam.png",
         "badge":    "Steam",
     },
     {
         "url":      "https://www.gamerpower.com/api/giveaways?platform=epic-games-store&type=game",
         "platform": "epic",
         "color":    0x313131,
-        "icon":     "https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Epic_Games_logo.svg/240px-Epic_Games_logo.svg.png",
+        "icon":     "https://raw.githubusercontent.com/Kubikzentimeter/discord-music-bot/main/assets/epic.png",
         "badge":    "Epic Games",
     },
 ]
