@@ -1,6 +1,6 @@
+import asyncio
 import discord
 from discord.ext import commands
-from datetime import datetime, timezone
 
 LOG_CHANNEL_ID = 1122303909407502458
 
@@ -82,6 +82,63 @@ class LoggerCog(commands.Cog):
             embed.set_footer(text=f"Server: {member.guild.name}")
             try:
                 await channel.send(embed=embed)
+            except Exception as e:
+                print(f"[Logger] Fehler beim Senden: {e}")
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
+        # Rollen-Änderungen erkennen
+        added_roles = [r for r in after.roles if r not in before.roles]
+        removed_roles = [r for r in before.roles if r not in after.roles]
+
+        if not added_roles and not removed_roles:
+            return
+
+        log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
+        if log_channel is None:
+            return
+
+        # Kurz warten damit das Audit-Log aktuell ist
+        await asyncio.sleep(0.5)
+
+        # Wer hat die Rolle vergeben/entzogen? → Audit-Log
+        moderator = None
+        try:
+            async for entry in after.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_role_update):
+                if entry.target.id == after.id:
+                    age = (discord.utils.utcnow() - entry.created_at).total_seconds()
+                    if age < 10:
+                        moderator = entry.user
+                    break
+        except discord.Forbidden:
+            pass
+
+        now = discord.utils.utcnow()
+        mod_text = f"von {moderator.mention}" if moderator else "automatisch"
+
+        for role in added_roles:
+            embed = discord.Embed(
+                description=f"🏅 {after.mention} hat die Rolle **{role.name}** erhalten {mod_text}",
+                color=role.color if role.color.value else discord.Color.blurple(),
+                timestamp=now,
+            )
+            embed.set_author(name=after.display_name, icon_url=after.display_avatar.url)
+            embed.set_footer(text=f"Server: {after.guild.name}")
+            try:
+                await log_channel.send(embed=embed)
+            except Exception as e:
+                print(f"[Logger] Fehler beim Senden: {e}")
+
+        for role in removed_roles:
+            embed = discord.Embed(
+                description=f"❌ {after.mention} hat die Rolle **{role.name}** verloren {mod_text}",
+                color=discord.Color.dark_red(),
+                timestamp=now,
+            )
+            embed.set_author(name=after.display_name, icon_url=after.display_avatar.url)
+            embed.set_footer(text=f"Server: {after.guild.name}")
+            try:
+                await log_channel.send(embed=embed)
             except Exception as e:
                 print(f"[Logger] Fehler beim Senden: {e}")
 
