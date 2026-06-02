@@ -84,9 +84,10 @@ class HallOfFameCog(commands.Cog):
         # AFK-Channel des Servers
         if member.guild.afk_channel and channel.id == member.guild.afk_channel.id:
             return "afk"
-        # Selbst stummgeschaltet, server-stummgeschaltet oder taub
+        # Nur vollständiges Taubstellen (Kopfhörer + Mikro) zählt als AFK
+        # Nur Mikro stummschalten (self_mute) zählt NICHT als AFK
         vs = member.voice
-        if vs and (vs.self_mute or vs.mute or vs.self_deaf or vs.deaf):
+        if vs and (vs.self_deaf or vs.deaf):
             return "afk"
         return "talk"
 
