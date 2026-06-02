@@ -62,6 +62,19 @@ class HallOfFameCog(commands.Cog):
         except Exception as e:
             print(f"[HallOfFame] Speicherfehler: {e}")
 
+    async def cog_load(self):
+        """Beim Start: alle Mitglieder die bereits in Voice-Channels sitzen erfassen."""
+        await self.bot.wait_until_ready()
+        for guild in self.bot.guilds:
+            for channel in guild.voice_channels:
+                for member in channel.members:
+                    if member.bot:
+                        continue
+                    stype = self._session_type(member, channel)
+                    if stype:
+                        self._start_session(member.id, stype)
+        print(f"[HallOfFame] {len(self.sessions)} laufende Sessions beim Start erkannt")
+
     # ── Session-Tracking ───────────────────────────────────────────────────────
 
     def _session_type(self, member: discord.Member, channel: discord.VoiceChannel | None) -> str | None:
@@ -191,11 +204,25 @@ class HallOfFameCog(commands.Cog):
 
     # ── Leaderboard posten/updaten ─────────────────────────────────────────────
 
+    def _flush_sessions(self):
+        """Schreibt laufende Sessions temporär in die Datei (Absturzsicherung)."""
+        now_ts = datetime.now(timezone.utc).timestamp()
+        for uid, session in self.sessions.items():
+            elapsed = now_ts - session["start"]
+            key = session["type"]
+            self.data[key][str(uid)] = self.data[key].get(str(uid), 0) + elapsed
+            # Session-Startzeit auf jetzt setzen damit keine Doppelzählung entsteht
+            session["start"] = now_ts
+        self._save_data()
+
     @tasks.loop(minutes=5)
     async def update_leaderboard(self):
         channel = self.bot.get_channel(HALL_CHANNEL_ID)
         if not channel:
             return
+
+        # Laufende Sessions zwischenspeichern (Absturzsicherung)
+        self._flush_sessions()
 
         embed = self._build_embed()
 
