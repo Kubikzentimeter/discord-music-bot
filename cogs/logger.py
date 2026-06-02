@@ -41,11 +41,30 @@ class LoggerCog(commands.Cog):
         # ── Wechsel zwischen Channels ─────────────────────────────────────────
         elif (before.channel is not None and after.channel is not None
               and before.channel.id != after.channel.id):
-            embed = discord.Embed(
-                description=f"🔀 {member.mention} hat **{before.channel.name}** → **{after.channel.name}** gewechselt",
-                color=discord.Color.orange(),
-                timestamp=now,
-            )
+            # Prüfen ob ein Moderator den User verschoben hat
+            await asyncio.sleep(0.3)
+            mover = None
+            try:
+                async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_move):
+                    age = (discord.utils.utcnow() - entry.created_at).total_seconds()
+                    if age < 5:
+                        mover = entry.user
+                    break
+            except discord.Forbidden:
+                pass
+
+            if mover and not mover.bot:
+                embed = discord.Embed(
+                    description=f"↔️ {member.mention} wurde von {mover.mention} aus **{before.channel.name}** → **{after.channel.name}** verschoben",
+                    color=discord.Color.yellow(),
+                    timestamp=now,
+                )
+            else:
+                embed = discord.Embed(
+                    description=f"🔀 {member.mention} hat **{before.channel.name}** → **{after.channel.name}** gewechselt",
+                    color=discord.Color.orange(),
+                    timestamp=now,
+                )
 
         # ── Stummschaltung ────────────────────────────────────────────────────
         elif before.self_mute != after.self_mute and after.channel is not None:
@@ -141,6 +160,103 @@ class LoggerCog(commands.Cog):
                 await log_channel.send(embed=embed)
             except Exception as e:
                 print(f"[Logger] Fehler beim Senden: {e}")
+
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member):
+        """Erkennt Kicks über das Audit-Log (kein eigenes Event in Discord)."""
+        log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
+        if log_channel is None:
+            return
+
+        await asyncio.sleep(0.5)
+        now = discord.utils.utcnow()
+
+        try:
+            async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.kick):
+                if entry.target.id == member.id:
+                    age = (discord.utils.utcnow() - entry.created_at).total_seconds()
+                    if age < 10:
+                        reason = entry.reason or "Kein Grund angegeben"
+                        embed = discord.Embed(
+                            description=f"👢 **{member}** wurde von {entry.user.mention} gekickt\n**Grund:** {reason}",
+                            color=discord.Color.dark_orange(),
+                            timestamp=now,
+                        )
+                        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+                        embed.set_footer(text=f"User-ID: {member.id}")
+                        await log_channel.send(embed=embed)
+                    return
+        except discord.Forbidden:
+            pass
+
+    @commands.Cog.listener()
+    async def on_member_ban(self, guild: discord.Guild, user: discord.User):
+        log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
+        if log_channel is None:
+            return
+
+        await asyncio.sleep(0.5)
+        now = discord.utils.utcnow()
+
+        moderator = None
+        reason = "Kein Grund angegeben"
+        try:
+            async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.ban):
+                if entry.target.id == user.id:
+                    age = (discord.utils.utcnow() - entry.created_at).total_seconds()
+                    if age < 10:
+                        moderator = entry.user
+                        reason = entry.reason or "Kein Grund angegeben"
+                    break
+        except discord.Forbidden:
+            pass
+
+        mod_text = moderator.mention if moderator else "Unbekannt"
+        embed = discord.Embed(
+            description=f"🔨 **{user}** wurde von {mod_text} gebannt\n**Grund:** {reason}",
+            color=discord.Color.dark_red(),
+            timestamp=now,
+        )
+        embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+        embed.set_footer(text=f"User-ID: {user.id}")
+        try:
+            await log_channel.send(embed=embed)
+        except Exception as e:
+            print(f"[Logger] Fehler beim Senden: {e}")
+
+    @commands.Cog.listener()
+    async def on_member_unban(self, guild: discord.Guild, user: discord.User):
+        log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
+        if log_channel is None:
+            return
+
+        await asyncio.sleep(0.5)
+        now = discord.utils.utcnow()
+
+        moderator = None
+        try:
+            async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.unban):
+                if entry.target.id == user.id:
+                    age = (discord.utils.utcnow() - entry.created_at).total_seconds()
+                    if age < 10:
+                        moderator = entry.user
+                    break
+        except discord.Forbidden:
+            pass
+
+        mod_text = moderator.mention if moderator else "Unbekannt"
+        embed = discord.Embed(
+            description=f"✅ **{user}** wurde von {mod_text} entbannt",
+            color=discord.Color.green(),
+            timestamp=now,
+        )
+        embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+        embed.set_footer(text=f"User-ID: {user.id}")
+        try:
+            await log_channel.send(embed=embed)
+        except Exception as e:
+            print(f"[Logger] Fehler beim Senden: {e}")
 
 
 async def setup(bot: commands.Bot):
