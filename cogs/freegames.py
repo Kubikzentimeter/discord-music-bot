@@ -9,6 +9,7 @@ GAMERPOWER_URL = "https://www.gamerpower.com/api/giveaways?platform=steam&type=g
 DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "freegames_data.json")
 
 BOT_OWNER_ID = 246291642468794369
+DEFAULT_CHANNEL_ID = 1511389381171220622
 
 
 class FreeGamesCog(commands.Cog):
@@ -29,7 +30,7 @@ class FreeGamesCog(commands.Cog):
                     return json.load(f)
         except Exception as e:
             print(f"[FreeGames] Fehler beim Laden der Daten: {e}")
-        return {"channel_id": None, "seen_ids": []}
+        return {"channel_id": DEFAULT_CHANNEL_ID, "seen_ids": []}
 
     def _save_data(self):
         try:
