@@ -9,16 +9,28 @@ HALL_CHANNEL_ID = 1511417114274038002
 DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "halloffame_data.json")
 BOT_OWNER_ID = 246291642468794369
 
-MEDALS = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+MEDALS     = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+BAR_FILL   = "🟩"
+BAR_EMPTY  = "⬛"
+BAR_AFK    = "🟧"
+BAR_LEN    = 8
 
 
 def _fmt_time(seconds: float) -> str:
-    """Wandelt Sekunden in 'Xh Ym' um."""
     seconds = int(seconds)
     h, m = divmod(seconds // 60, 60)
     if h > 0:
         return f"{h}h {m:02d}m"
     return f"{m}m"
+
+
+def _bar(value: float, max_val: float, afk: bool = False) -> str:
+    if max_val <= 0:
+        return BAR_EMPTY * BAR_LEN
+    filled = round((value / max_val) * BAR_LEN)
+    filled = max(1, min(filled, BAR_LEN))
+    tile = BAR_AFK if afk else BAR_FILL
+    return tile * filled + BAR_EMPTY * (BAR_LEN - filled)
 
 
 class HallOfFameCog(commands.Cog):
@@ -122,51 +134,55 @@ class HallOfFameCog(commands.Cog):
         top_afk  = sorted(afk_tmp.items(),  key=lambda x: x[1], reverse=True)[:3]
 
         embed = discord.Embed(
-            title="🏆  S I E G E S H A L L E",
+            title="🏆  S I E G E S H A L L E  🏆",
             description=(
-                "Hier werden die aktivsten Mitglieder unseres Servers geehrt!\n"
-                "Die Zeiten werden live gemessen und alle 5 Minuten aktualisiert.\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                "✨ **Die aktivsten Mitglieder unseres Servers!**\n"
+                "Zeiten werden live gemessen · Update alle 5 Minuten\n"
+                "```\n🟩 = Aktiv    🟧 = AFK / Stumm\n```"
             ),
-            color=discord.Color.gold(),
+            color=0xFFD700,
             timestamp=now,
         )
 
-        # Top 5 Aktive Member
+        # ── Top 5 Aktive Member ────────────────────────────────────────────────
+        max_talk = top_talk[0][1] if top_talk else 1
         if top_talk:
             lines = []
             for i, (uid, secs) in enumerate(top_talk):
                 medal = MEDALS[i] if i < len(MEDALS) else f"{i+1}."
-                lines.append(f"{medal} <@{uid}>\n┗ ⏱️ **{_fmt_time(secs)}**")
+                bar   = _bar(secs, max_talk, afk=False)
+                lines.append(f"{medal} <@{uid}>\n{bar} **{_fmt_time(secs)}**")
             embed.add_field(
-                name="🎙️ ┃ Top 5 Aktive Member",
-                value="\n".join(lines),
+                name="🎙️ ╔══ TOP 5 AKTIVE MEMBER",
+                value="\n\n".join(lines),
                 inline=False,
             )
         else:
             embed.add_field(
-                name="🎙️ ┃ Top 5 Aktive Member",
-                value="*Noch keine Daten — sprich einfach im Voice-Channel!*",
+                name="🎙️ ╔══ TOP 5 AKTIVE MEMBER",
+                value="*Noch keine Daten — komm in einen Voice-Channel!* 🎤",
                 inline=False,
             )
 
-        embed.add_field(name="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", value="", inline=False)
+        embed.add_field(name="​", value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
 
-        # Top 3 nicht so Aktive Member
+        # ── Top 3 AFK Member ───────────────────────────────────────────────────
+        max_afk = top_afk[0][1] if top_afk else 1
         if top_afk:
             lines = []
             for i, (uid, secs) in enumerate(top_afk):
                 medal = MEDALS[i] if i < 3 else f"{i+1}."
-                lines.append(f"{medal} <@{uid}>\n┗ 💤 **{_fmt_time(secs)}**")
+                bar   = _bar(secs, max_afk, afk=True)
+                lines.append(f"{medal} <@{uid}>\n{bar} **{_fmt_time(secs)}**")
             embed.add_field(
-                name="😴 ┃ Top 3 AFK Member",
-                value="\n".join(lines),
+                name="😴 ╔══ TOP 3 AFK MEMBER",
+                value="\n\n".join(lines),
                 inline=False,
             )
         else:
             embed.add_field(
-                name="😴 ┃ Top 3 AFK Member",
-                value="*Noch keine Daten.*",
+                name="😴 ╔══ TOP 3 AFK MEMBER",
+                value="*Noch keine Daten.* 💤",
                 inline=False,
             )
 
