@@ -5,7 +5,10 @@ import aiohttp
 import json
 import os
 
-GAMERPOWER_URL = "https://www.gamerpower.com/api/giveaways?platform=steam&type=game"
+SOURCES = [
+    {"url": "https://www.gamerpower.com/api/giveaways?platform=steam&type=game",            "label": "🎮 Kostenloses Steam-Spiel",       "color": 0x1b2838},
+    {"url": "https://www.gamerpower.com/api/giveaways?platform=epic-games-store&type=game", "label": "🎁 Kostenloses Epic Games-Spiel",   "color": 0x2d2d2d},
+]
 DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "freegames_data.json")
 
 BOT_OWNER_ID = 246291642468794369
@@ -46,56 +49,51 @@ class FreeGamesCog(commands.Cog):
         channel_id = self.data.get("channel_id")
         if not channel_id:
             return
-
         channel = self.bot.get_channel(channel_id)
         if not channel:
             return
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(GAMERPOWER_URL, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                    if resp.status != 200:
-                        print(f"[FreeGames] API-Fehler: HTTP {resp.status}")
-                        return
-                    games = await resp.json(content_type=None)
-        except Exception as e:
-            print(f"[FreeGames] Netzwerkfehler: {e}")
-            return
+        any_new = False
+        async with aiohttp.ClientSession() as session:
+            for source in SOURCES:
+                try:
+                    async with session.get(source["url"], timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                        if resp.status != 200:
+                            print(f"[FreeGames] API-Fehler {source['label']}: HTTP {resp.status}")
+                            continue
+                        games = await resp.json(content_type=None)
+                except Exception as e:
+                    print(f"[FreeGames] Netzwerkfehler {source['label']}: {e}")
+                    continue
 
-        if not isinstance(games, list):
-            return
+                if not isinstance(games, list):
+                    continue
 
-        new_games = [g for g in games if str(g.get("id")) not in self.data["seen_ids"]]
+                new_games = [g for g in games if str(g.get("id")) not in self.data["seen_ids"]]
+                for game in new_games:
+                    try:
+                        embed = discord.Embed(
+                            title=f"{source['label']}: {game.get('title', 'Unbekannt')}",
+                            description="Für kurze Zeit kostenlos erhältlich! Jetzt schnell zugreifen. 👇",
+                            color=source["color"],
+                            url=game.get("open_giveaway_url") or game.get("gamerpower_url", ""),
+                        )
+                        if game.get("image"):
+                            embed.set_image(url=game["image"])
+                        elif game.get("thumbnail"):
+                            embed.set_thumbnail(url=game["thumbnail"])
+                        embed.add_field(name="💰 Wert",       value=game.get("worth", "Unbekannt"),    inline=True)
+                        embed.add_field(name="⏳ Endet am",   value=game.get("end_date", "Unbekannt"), inline=True)
+                        embed.add_field(name="🖥️ Plattform", value=game.get("platforms", "—"),        inline=True)
+                        embed.set_footer(text="Quelle: GamerPower • Kostenlos solange der Aktionszeitraum läuft")
+                        await channel.send(embed=embed)
+                        self.data["seen_ids"].append(str(game["id"]))
+                        any_new = True
+                        print(f"[FreeGames] Gepostet: {game.get('title')}")
+                    except Exception as e:
+                        print(f"[FreeGames] Fehler beim Posten: {e}")
 
-        for game in new_games:
-            try:
-                embed = discord.Embed(
-                    title=f"🎮 Kostenloses Steam-Spiel: {game.get('title', 'Unbekannt')}",
-                    description="Für kurze Zeit kostenlos erhältlich! Jetzt schnell zugreifen. 👇",
-                    color=discord.Color.green(),
-                    url=game.get("open_giveaway_url") or game.get("gamerpower_url", ""),
-                )
-                if game.get("image"):
-                    embed.set_image(url=game["image"])
-                elif game.get("thumbnail"):
-                    embed.set_thumbnail(url=game["thumbnail"])
-
-                worth = game.get("worth", "Unbekannt")
-                end_date = game.get("end_date", "Unbekannt")
-                platforms = game.get("platforms", "Steam")
-
-                embed.add_field(name="💰 Wert", value=worth, inline=True)
-                embed.add_field(name="⏳ Endet am", value=end_date, inline=True)
-                embed.add_field(name="🖥️ Plattform", value=platforms, inline=True)
-                embed.set_footer(text="Quelle: GamerPower • Kostenlos solange der Aktionszeitraum läuft")
-
-                await channel.send(embed=embed)
-                self.data["seen_ids"].append(str(game["id"]))
-                print(f"[FreeGames] Neues Spiel gepostet: {game.get('title')}")
-            except Exception as e:
-                print(f"[FreeGames] Fehler beim Posten: {e}")
-
-        if new_games:
+        if any_new:
             self._save_data()
 
     @check_free_games.before_loop
@@ -104,7 +102,7 @@ class FreeGamesCog(commands.Cog):
 
     # ── Slash-Befehle ──────────────────────────────────────────────────────────
 
-    @app_commands.command(name="setfreegames", description="Setzt den Channel für kostenlose Steam-Spiele")
+    @app_commands.command(name="setfreegames", description="Setzt den Channel für kostenlose Steam & Epic-Spiele")
     @app_commands.describe(channel="Der Channel in dem neue kostenlose Spiele gepostet werden")
     async def setfreegames(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if interaction.user.id != BOT_OWNER_ID:
@@ -118,7 +116,7 @@ class FreeGamesCog(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="checkfreegames", description="Jetzt sofort auf kostenlose Steam-Spiele prüfen")
+    @app_commands.command(name="checkfreegames", description="Jetzt sofort auf kostenlose Steam & Epic-Spiele prüfen")
     async def checkfreegames(self, interaction: discord.Interaction):
         if interaction.user.id != BOT_OWNER_ID:
             return await interaction.response.send_message("Keine Berechtigung.", ephemeral=True)
