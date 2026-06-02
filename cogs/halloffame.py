@@ -137,7 +137,7 @@ class HallOfFameCog(commands.Cog):
             lines = []
             for i, (uid, secs) in enumerate(top_talk):
                 medal = MEDALS[i] if i < len(MEDALS) else f"{i+1}."
-                lines.append(f"{medal} <@{uid}>\n┗ ⏱️ **{_fmt_time(secs)}** aktiv gesprochen")
+                lines.append(f"{medal} <@{uid}>\n┗ ⏱️ **{_fmt_time(secs)}**")
             embed.add_field(
                 name="🎙️ ┃ Top 5 Aktive Member",
                 value="\n".join(lines),
@@ -157,15 +157,15 @@ class HallOfFameCog(commands.Cog):
             lines = []
             for i, (uid, secs) in enumerate(top_afk):
                 medal = MEDALS[i] if i < 3 else f"{i+1}."
-                lines.append(f"{medal} <@{uid}>\n┗ 💤 **{_fmt_time(secs)}** im AFK / stummgeschaltet")
+                lines.append(f"{medal} <@{uid}>\n┗ 💤 **{_fmt_time(secs)}**")
             embed.add_field(
-                name="😴 ┃ Top 3 nicht so Aktive Member",
+                name="😴 ┃ Top 3 AFK Member",
                 value="\n".join(lines),
                 inline=False,
             )
         else:
             embed.add_field(
-                name="😴 ┃ Top 3 nicht so Aktive Member",
+                name="😴 ┃ Top 3 AFK Member",
                 value="*Noch keine Daten.*",
                 inline=False,
             )
