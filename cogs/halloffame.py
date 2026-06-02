@@ -138,7 +138,7 @@ class HallOfFameCog(commands.Cog):
             description=(
                 "✨ **Die aktivsten Mitglieder unseres Servers!**\n"
                 "Zeiten werden live gemessen · Update alle 5 Minuten\n"
-                "```\n🟩 = Aktiv    🟧 = AFK / Stumm\n```"
+                "```\n🟩 = Aktiv    🟧 = AFK\n```"
             ),
             color=0xFFD700,
             timestamp=now,
