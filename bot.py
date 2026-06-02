@@ -66,6 +66,7 @@ async def on_ready():
 
         await bot.load_extension("cogs.music")
         await bot.load_extension("cogs.freegames")
+        await bot.load_extension("cogs.logger")
         bot._extensions_loaded = True
 
     try:
