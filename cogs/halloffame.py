@@ -122,40 +122,55 @@ class HallOfFameCog(commands.Cog):
         top_afk  = sorted(afk_tmp.items(),  key=lambda x: x[1], reverse=True)[:3]
 
         embed = discord.Embed(
-            title="🏆 Siegeshalle",
+            title="🏆  S I E G E S H A L L E",
+            description=(
+                "Hier werden die aktivsten Mitglieder unseres Servers geehrt!\n"
+                "Die Zeiten werden live gemessen und alle 5 Minuten aktualisiert.\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            ),
             color=discord.Color.gold(),
             timestamp=now,
         )
 
-        # Top 5 Sprecher
+        # Top 5 Aktive Member
         if top_talk:
             lines = []
             for i, (uid, secs) in enumerate(top_talk):
                 medal = MEDALS[i] if i < len(MEDALS) else f"{i+1}."
-                lines.append(f"{medal} <@{uid}> — **{_fmt_time(secs)}**")
+                lines.append(f"{medal} <@{uid}>\n┗ ⏱️ **{_fmt_time(secs)}** aktiv gesprochen")
             embed.add_field(
-                name="🎙️ Top 5 Sprecher",
+                name="🎙️ ┃ Top 5 Aktive Member",
                 value="\n".join(lines),
                 inline=False,
             )
         else:
-            embed.add_field(name="🎙️ Top 5 Sprecher", value="Noch keine Daten.", inline=False)
+            embed.add_field(
+                name="🎙️ ┃ Top 5 Aktive Member",
+                value="*Noch keine Daten — sprich einfach im Voice-Channel!*",
+                inline=False,
+            )
 
-        # Top 3 AFK / Muted
+        embed.add_field(name="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", value="", inline=False)
+
+        # Top 3 nicht so Aktive Member
         if top_afk:
             lines = []
             for i, (uid, secs) in enumerate(top_afk):
                 medal = MEDALS[i] if i < 3 else f"{i+1}."
-                lines.append(f"{medal} <@{uid}> — **{_fmt_time(secs)}**")
+                lines.append(f"{medal} <@{uid}>\n┗ 💤 **{_fmt_time(secs)}** im AFK / stummgeschaltet")
             embed.add_field(
-                name="😴 Top 3 AFK / Stummgeschaltet",
+                name="😴 ┃ Top 3 nicht so Aktive Member",
                 value="\n".join(lines),
                 inline=False,
             )
         else:
-            embed.add_field(name="😴 Top 3 AFK / Stummgeschaltet", value="Noch keine Daten.", inline=False)
+            embed.add_field(
+                name="😴 ┃ Top 3 nicht so Aktive Member",
+                value="*Noch keine Daten.*",
+                inline=False,
+            )
 
-        embed.set_footer(text="Zuletzt aktualisiert")
+        embed.set_footer(text="🕐 Zuletzt aktualisiert")
         return embed
 
     # ── Leaderboard posten/updaten ─────────────────────────────────────────────
