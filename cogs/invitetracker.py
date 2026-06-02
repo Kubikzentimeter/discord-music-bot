@@ -5,6 +5,7 @@ INVITE_LOG_CHANNEL_ID = 1122303908648329218
 ADMIN_ROLE_ID         = 1122303908178571290
 ASSIGNABLE_ROLE_ID    = 1122303908178571289
 ASSIGNABLE_ROLE_ID_2  = 1122303908161790048
+MOD_ROLE_ID           = 1122303908178571289
 
 
 class AssignRoleView(discord.ui.View):
@@ -17,9 +18,11 @@ class AssignRoleView(discord.ui.View):
         self.role2 = role2
 
     def _has_perm(self, interaction: discord.Interaction) -> bool:
+        user_role_ids = {r.id for r in interaction.user.roles}
         return (
             interaction.user.guild_permissions.administrator
-            or any(r.id == ADMIN_ROLE_ID for r in interaction.user.roles)
+            or ADMIN_ROLE_ID in user_role_ids
+            or MOD_ROLE_ID in user_role_ids
         )
 
     async def _assign(self, interaction: discord.Interaction, button: discord.ui.Button, role: discord.Role):
