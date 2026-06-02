@@ -163,6 +163,62 @@ class LoggerCog(commands.Cog):
 
 
     @commands.Cog.listener()
+    async def on_socket_event_type(self, event_type: str, data: dict):
+        """Soundboard-Sounds über raw Gateway-Event tracken."""
+        if event_type != "VOICE_CHANNEL_EFFECT_SEND":
+            return
+
+        sound_id = data.get("sound_id")
+        if not sound_id:
+            return  # Nur Soundboard-Sounds, keine Emoji-Effekte
+
+        guild_id = int(data.get("guild_id", 0))
+        channel_id = int(data.get("channel_id", 0))
+        user_id = int(data.get("user_id", 0))
+
+        guild = self.bot.get_guild(guild_id)
+        if not guild:
+            return
+
+        member = guild.get_member(user_id)
+        vc = guild.get_channel(channel_id)
+        log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
+        if not log_channel:
+            return
+
+        member_text = member.mention if member else f"<@{user_id}>"
+        channel_text = vc.name if vc else f"Channel {channel_id}"
+        emoji = data.get("emoji_name") or ""
+        emoji_display = f" {emoji}" if emoji else ""
+
+        # Sound-Name über API holen
+        sound_name = None
+        try:
+            sounds = await guild.fetch_soundboard_sounds()
+            for s in sounds:
+                if str(s.id) == str(sound_id):
+                    sound_name = s.name
+                    break
+        except Exception:
+            pass
+
+        sound_display = f"**{sound_name}**" if sound_name else f"Sound `{sound_id}`"
+
+        now = discord.utils.utcnow()
+        embed = discord.Embed(
+            description=f"🎵{emoji_display} {member_text} hat {sound_display} in **{channel_text}** abgespielt",
+            color=discord.Color.purple(),
+            timestamp=now,
+        )
+        if member:
+            embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+        embed.set_footer(text=f"Server: {guild.name}")
+        try:
+            await log_channel.send(embed=embed)
+        except Exception as e:
+            print(f"[Logger] Soundboard-Fehler: {e}")
+
+    @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
         """Erkennt Kicks über das Audit-Log (kein eigenes Event in Discord)."""
         log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
