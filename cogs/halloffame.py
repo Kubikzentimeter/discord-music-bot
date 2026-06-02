@@ -192,17 +192,15 @@ class HallOfFameCog(commands.Cog):
     # ── Slash-Befehle ──────────────────────────────────────────────────────────
 
     @app_commands.command(name="hallofame", description="Siegeshalle sofort aktualisieren")
+    @app_commands.default_permissions(administrator=True)
     async def hallofame(self, interaction: discord.Interaction):
-        if interaction.user.id != BOT_OWNER_ID:
-            return await interaction.response.send_message("Keine Berechtigung.", ephemeral=True)
         await interaction.response.send_message("🔄 Aktualisiere…", ephemeral=True)
         await self.update_leaderboard()
         await interaction.edit_original_response(content="✅ Siegeshalle aktualisiert!")
 
     @app_commands.command(name="resetstats", description="Alle Sprachstatistiken zurücksetzen")
+    @app_commands.default_permissions(administrator=True)
     async def resetstats(self, interaction: discord.Interaction):
-        if interaction.user.id != BOT_OWNER_ID:
-            return await interaction.response.send_message("Keine Berechtigung.", ephemeral=True)
         self.data["talk"] = {}
         self.data["afk"] = {}
         self.sessions.clear()
