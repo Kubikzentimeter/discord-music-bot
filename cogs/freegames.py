@@ -184,6 +184,16 @@ class FreeGamesCog(commands.Cog):
         await self.check_free_games()
         await interaction.edit_original_response(content="✅ Fertig — neue Spiele wurden gepostet (falls vorhanden).")
 
+    @app_commands.command(name="resetfreegames", description="Alle Spiele als ungesehen markieren und erneut senden")
+    async def resetfreegames(self, interaction: discord.Interaction):
+        if interaction.user.id != BOT_OWNER_ID:
+            return await interaction.response.send_message("Keine Berechtigung.", ephemeral=True)
+        self.data["seen_ids"] = []
+        self._save_data()
+        await interaction.response.send_message("🔄 Liste zurückgesetzt — sende alle Spiele erneut…", ephemeral=True)
+        await self.check_free_games()
+        await interaction.edit_original_response(content="✅ Alle Spiele wurden erneut gepostet.")
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(FreeGamesCog(bot))
