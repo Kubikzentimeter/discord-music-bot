@@ -71,7 +71,7 @@ class FreeGamesCog(commands.Cog):
             try:
                 embed = discord.Embed(
                     title=f"🎮 Kostenloses Steam-Spiel: {game.get('title', 'Unbekannt')}",
-                    description=game.get("description", "")[:300] + ("…" if len(game.get("description", "")) > 300 else ""),
+                    description="Für kurze Zeit kostenlos erhältlich! Jetzt schnell zugreifen. 👇",
                     color=discord.Color.green(),
                     url=game.get("open_giveaway_url") or game.get("gamerpower_url", ""),
                 )
