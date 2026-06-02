@@ -9,16 +9,13 @@ MOD_ROLE_ID           = 1122303908178571289
 
 
 class AssignRoleView(discord.ui.View):
-    def __init__(self, member: discord.Member, role1: discord.Role, role2: discord.Role):
+    def __init__(self, member: discord.Member, role: discord.Role):
         super().__init__(timeout=86400)
         self.member = member
-        self.role1 = role1
-        self.role2 = role2
-        # Knopf-Labels auf echten Rollennamen setzen
+        self.role = role
         buttons = [c for c in self.children if isinstance(c, discord.ui.Button)]
-        if len(buttons) >= 2:
-            buttons[0].label = f"✅ {role1.name} vergeben"
-            buttons[1].label = f"✅ {role2.name} vergeben"
+        if buttons:
+            buttons[0].label = f"✅ {role.name} vergeben"
 
     def _has_perm(self, interaction: discord.Interaction) -> bool:
         user_role_ids = {r.id for r in interaction.user.roles}
@@ -28,33 +25,26 @@ class AssignRoleView(discord.ui.View):
             or MOD_ROLE_ID in user_role_ids
         )
 
-    async def _assign(self, interaction: discord.Interaction, button: discord.ui.Button, role: discord.Role):
+    @discord.ui.button(label="✅ Member vergeben", style=discord.ButtonStyle.green)
+    async def assign_role(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self._has_perm(interaction):
             return await interaction.response.send_message("Keine Berechtigung.", ephemeral=True)
-        if role in self.member.roles:
-            button.label = f"✅ {role.name} bereits vorhanden"
+        if self.role in self.member.roles:
+            button.label = f"✅ {self.role.name} bereits vorhanden"
             button.disabled = True
             return await interaction.response.edit_message(view=self)
         try:
-            await self.member.add_roles(role, reason=f"Vergeben von {interaction.user}")
-            button.label = f"✅ {role.name} — {interaction.user.display_name}"
+            await self.member.add_roles(self.role, reason=f"Vergeben von {interaction.user}")
+            button.label = f"✅ {self.role.name} — {interaction.user.display_name}"
             button.disabled = True
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(
-                f"✅ {self.member.mention} hat die Rolle **{role.name}** erhalten!", ephemeral=True
+                f"✅ {self.member.mention} hat die Rolle **{self.role.name}** erhalten!", ephemeral=True
             )
         except discord.Forbidden:
             await interaction.response.send_message("❌ Keine Berechtigung diese Rolle zu vergeben.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"Fehler: {e}", ephemeral=True)
-
-    @discord.ui.button(label="✅ Rang vergeben", style=discord.ButtonStyle.green)
-    async def assign_role1(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._assign(interaction, button, self.role1)
-
-    @discord.ui.button(label="✅ Rang vergeben", style=discord.ButtonStyle.blurple)
-    async def assign_role2(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._assign(interaction, button, self.role2)
 
 
 class InviteTrackerCog(commands.Cog):
@@ -109,10 +99,9 @@ class InviteTrackerCog(commands.Cog):
         except discord.Forbidden:
             print("[InviteTracker] ⚠️ Keine Berechtigung Invites abzurufen")
 
-        admin_role       = guild.get_role(ADMIN_ROLE_ID)
-        assignable_role  = guild.get_role(ASSIGNABLE_ROLE_ID)
-        assignable_role2 = guild.get_role(ASSIGNABLE_ROLE_ID_2)
-        inviter_text     = inviter.mention if inviter else "Unbekannt (OAuth / Vanity-URL)"
+        admin_role      = guild.get_role(ADMIN_ROLE_ID)
+        assignable_role = guild.get_role(ASSIGNABLE_ROLE_ID)
+        inviter_text    = inviter.mention if inviter else "Unbekannt (OAuth / Vanity-URL)"
 
         embed = discord.Embed(
             title="👋 Neues Mitglied beigetreten!",
@@ -132,9 +121,7 @@ class InviteTrackerCog(commands.Cog):
         embed.set_footer(text=f"User-ID: {member.id}")
 
         ping = admin_role.mention if admin_role else "@admin"
-        view = None
-        if assignable_role and assignable_role2:
-            view = AssignRoleView(member, assignable_role, assignable_role2)
+        view = AssignRoleView(member, assignable_role) if assignable_role else None
 
         try:
             await log_channel.send(content=ping, embed=embed, view=view)
