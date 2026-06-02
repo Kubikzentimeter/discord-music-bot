@@ -65,6 +65,7 @@ async def on_ready():
         print("[Startup] VOICE_SERVER_UPDATE wiederhergestellt — kein 4006-Loop möglich")
 
         await bot.load_extension("cogs.music")
+        await bot.load_extension("cogs.freegames")
         bot._extensions_loaded = True
 
     try:
