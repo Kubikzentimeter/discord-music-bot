@@ -69,6 +69,7 @@ async def on_ready():
         await bot.load_extension("cogs.freegames")
         await bot.load_extension("cogs.logger")
         await bot.load_extension("cogs.invitetracker")
+        await bot.load_extension("cogs.halloffame")
         bot._extensions_loaded = True
 
     try:
