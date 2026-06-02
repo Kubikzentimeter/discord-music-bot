@@ -62,10 +62,6 @@ def _build_embed(game: dict, source: dict) -> discord.Embed:
 
     # Links in der Description
     links = f"[Im Browser öffnen ↗]({game_url})"
-    if source["platform"] == "steam":
-        appid_match = re.search(r"store\.steampowered\.com/app/(\d+)", game_url)
-        if appid_match:
-            links += f"\n[Im Steam Client öffnen ↗](steam://store/{appid_match.group(1)})"
 
     embed = discord.Embed(
         title=title,
