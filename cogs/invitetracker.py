@@ -120,7 +120,10 @@ class InviteTrackerCog(commands.Cog):
             )
         embed.set_footer(text=f"User-ID: {member.id}")
 
-        ping = admin_role.mention if admin_role else "@admin"
+        mod_role = guild.get_role(MOD_ROLE_ID)
+        # Beide Rollen pingen, Duplikate vermeiden
+        ping_roles = {r.id: r for r in [admin_role, mod_role] if r}
+        ping = " ".join(r.mention for r in ping_roles.values())
         view = AssignRoleView(member, assignable_role) if assignable_role else None
 
         try:
